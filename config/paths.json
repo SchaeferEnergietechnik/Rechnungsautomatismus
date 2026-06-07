@@ -1,0 +1,9 @@
+﻿{
+  "paths": {
+    "data_root": "data",
+    "backup_root": "backups",
+    "state_root": "storage/state",
+    "pdf_root": "storage/pdfs",
+    "config_root": "config"
+  }
+}

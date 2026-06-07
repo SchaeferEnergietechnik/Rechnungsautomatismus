@@ -1,0 +1,28 @@
+﻿{
+  "mandants": [
+    {
+      "id": "ges_energietechnik",
+      "display_name": "G.E.S. Energietechnik GmbH",
+      "firma_name": "G.E.S. Energietechnik GmbH",
+      "strasse": "Ferchlipp 16",
+      "plz": "39615",
+      "ort": "Altmärkische Wische",
+      "contacts_csv": "data/ges_energietechnik/contacts.csv",
+      "products_csv": "data/ges_energietechnik/produkte_services.csv",
+      "default_payment_terms": "14 Tage netto",
+      "logo_path": "assets/logos/ges_energietechnik.png"
+    },
+    {
+      "id": "ges_power_service",
+      "display_name": "G.E.S. Power Service GmbH",
+      "firma_name": "G.E.S. Power Service GmbH",
+      "strasse": "Ferchlipp 16",
+      "plz": "39615",
+      "ort": "Altmärkische Wische",
+      "contacts_csv": "data/ges_power_service/contacts.csv",
+      "products_csv": "data/ges_power_service/produkte_services.csv",
+      "default_payment_terms": "14 Tage netto",
+      "logo_path": "assets/logos/ges_power_service.png"
+    }
+  ]
+}

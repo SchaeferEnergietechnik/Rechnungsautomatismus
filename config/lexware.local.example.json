@@ -1,0 +1,10 @@
+{
+  "lexware": {
+    "base_url": "https://api.lexware.io",
+    "client_id": "",
+    "client_secret": "",
+    "access_token": "",
+    "refresh_token": "",
+    "company_id": ""
+  }
+}

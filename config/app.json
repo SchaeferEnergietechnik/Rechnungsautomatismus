@@ -1,0 +1,8 @@
+﻿{
+  "app": {
+    "name": "Rechnungsvorschlag Tool",
+    "version": "0.1.0",
+    "log_level": "INFO",
+    "debug": false
+  }
+}

@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local Lexware credentials/config (never commit)
+config/lexware.local.json
+config/lexware.secrets.json

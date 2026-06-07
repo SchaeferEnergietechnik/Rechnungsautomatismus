@@ -1,0 +1,163 @@
+﻿{
+  "excel_import": {
+    "sheet_name": "Termine",
+    "header_row": 1,
+    "employee_blocks": [
+      {
+        "index": 1,
+        "employee_name": "Pascal Fäthke",
+        "start_column": 0,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      },
+      {
+        "index": 2,
+        "employee_name": "Niklas Helmchen",
+        "start_column": 15,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      },
+      {
+        "index": 3,
+        "employee_name": "Hagen Schmidt",
+        "start_column": 30,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      },
+      {
+        "index": 4,
+        "employee_name": "Finn Kolzer",
+        "start_column": 45,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      },
+      {
+        "index": 5,
+        "employee_name": "Sebastian Wendt",
+        "start_column": 60,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      },
+      {
+        "index": 6,
+        "employee_name": "Elias Mummhardt",
+        "start_column": 75,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      },
+      {
+        "index": 7,
+        "employee_name": "Kevin Koehn",
+        "start_column": 90,
+        "field_order": [
+          "kw",
+          "datum",
+          "wochentag",
+          "status_oder_kunde",
+          "kunde",
+          "projekt",
+          "adresse",
+          "ansprechpartner",
+          "auftrag",
+          "bemerkungen",
+          "bittest",
+          "slp",
+          "esw",
+          "dpl",
+          "re"
+        ]
+      }
+    ],
+    "extra_columns_start": 105
+  }
+}

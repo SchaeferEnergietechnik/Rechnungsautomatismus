@@ -1,0 +1,61 @@
+﻿from dataclasses import dataclass
+
+from PySide6.QtWidgets import QApplication
+
+from app.config_loader import ConfigLoader
+from gui.main_window import MainWindow
+from importer.employee_block_extractor import EmployeeBlockExtractor
+from importer.excel_termin_importer import ExcelTerminImporter
+from services.block_classification_service import BlockClassificationService
+from services.grouping_service import GroupingService
+from services.lexware_draft_export_service import LexwareDraftExportService
+from services.proposal_builder_service import ProposalBuilderService
+
+
+@dataclass
+class AppContext:
+    qt_app: QApplication
+    main_window: MainWindow
+    config_loader: ConfigLoader
+    importer: ExcelTerminImporter
+    extractor: EmployeeBlockExtractor
+    classifier: BlockClassificationService
+    builder: ProposalBuilderService
+    grouping: GroupingService
+    lexware_export: LexwareDraftExportService
+
+
+def bootstrap_application() -> AppContext:
+    qt_app = QApplication([])
+
+    config_loader = ConfigLoader()
+    importer = ExcelTerminImporter()
+    extractor = EmployeeBlockExtractor()
+    classifier = BlockClassificationService()
+    builder = ProposalBuilderService()
+    grouping = GroupingService()
+    lexware_export = LexwareDraftExportService()
+
+    main_window = MainWindow(
+        config_loader=config_loader,
+        importer=importer,
+        extractor=extractor,
+        classifier=classifier,
+        builder=builder,
+        grouping=grouping,
+        lexware_export_service=lexware_export,
+    )
+
+    main_window.load_file("data/termine.xlsx")
+
+    return AppContext(
+        qt_app=qt_app,
+        main_window=main_window,
+        config_loader=config_loader,
+        importer=importer,
+        extractor=extractor,
+        classifier=classifier,
+        builder=builder,
+        grouping=grouping,
+        lexware_export=lexware_export,
+    )
