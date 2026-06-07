@@ -17,6 +17,7 @@ class LexwareDraftExportService:
         self.token_url = os.getenv("LEXWARE_TOKEN_URL", "").strip()
         self.default_net_amount = self._safe_float(os.getenv("LEXWARE_DEFAULT_NET_AMOUNT", "1.0"), 1.0)
         self.default_tax_rate = self._safe_float(os.getenv("LEXWARE_DEFAULT_TAX_RATE", "19.0"), 19.0)
+        self.default_payment_term_days = self._safe_int(os.getenv("LEXWARE_PAYMENT_TERM_DAYS", "14"), 14)
 
         if not self.token_url and self.base_url:
             self.token_url = f"{self.base_url.rstrip('/')}/oauth/token"
@@ -47,10 +48,18 @@ class LexwareDraftExportService:
                     "payload": None,
                 }
 
-        payload = self._build_payload(group)
+        payload_variants = self._build_payload_variants(group)
+        payload = payload_variants[0]
         url = self._build_url()
         first_try = self._post_draft(url, payload)
         if first_try.get("success"):
+            return first_try
+
+        if self._is_lineitems_validation_error(first_try):
+            for variant_payload in payload_variants[1:]:
+                retry_try = self._post_draft(url, variant_payload)
+                if retry_try.get("success"):
+                    return retry_try
             return first_try
 
         if first_try.get("status_code") != 401:
@@ -66,6 +75,18 @@ class LexwareDraftExportService:
         if not second_try.get("success"):
             second_try["error"] = f"{second_try.get('error')} (nach Token-Refresh)"
         return second_try
+
+    def _is_lineitems_validation_error(self, result: dict) -> bool:
+        if result.get("status_code") != 400:
+            return False
+
+        response = result.get("response")
+        if isinstance(response, dict):
+            message = str(response.get("message", ""))
+        else:
+            message = str(response or "")
+
+        return "lineitems" in message.lower()
 
     def _post_draft(self, url: str, payload: dict) -> dict:
         headers = {
@@ -200,6 +221,8 @@ class LexwareDraftExportService:
         if remarks:
             description_parts.append(f"Bemerkung: {remarks}")
 
+        line_item = self._build_line_item(project_name, description_parts)
+
         return {
             "voucherStatus": "draft",
             "voucherDate": voucher_date,
@@ -210,22 +233,7 @@ class LexwareDraftExportService:
                 "zip": "",
                 "countryCode": "DE",
             },
-            "lineItems": {
-                "lineItems": [
-                    {
-                        "type": "custom",
-                        "name": f"Rechnung {project_name}"[:120],
-                        "description": " | ".join([part for part in description_parts if part]),
-                        "quantity": 1,
-                        "unitName": "Stk",
-                        "unitPrice": {
-                            "currency": "EUR",
-                            "netAmount": self.default_net_amount,
-                            "taxRatePercentage": self.default_tax_rate,
-                        },
-                    }
-                ]
-            },
+            "lineItems": [line_item],
             "totalPrice": {
                 "currency": "EUR",
             },
@@ -233,7 +241,8 @@ class LexwareDraftExportService:
                 "taxType": "net",
             },
             "paymentConditions": {
-                "paymentTermLabel": "14 Tage netto",
+                "paymentTermLabel": f"{self.default_payment_term_days} Tage netto",
+                "paymentTermDuration": self.default_payment_term_days,
             },
             "shippingConditions": {
                 "shippingDate": voucher_date,
@@ -242,6 +251,35 @@ class LexwareDraftExportService:
             "title": "Rechnung",
             "introduction": f"Automatisch erzeugter Entwurf für {project_name}",
             "remark": "Erzeugt durch Rechnungsautomatismus",
+        }
+
+    def _build_payload_variants(self, group: dict) -> list[dict]:
+        base_payload = self._build_payload(group)
+
+        nested_payload = dict(base_payload)
+        nested_payload["lineItems"] = {
+            "lineItems": list(base_payload.get("lineItems", [])),
+        }
+
+        return [base_payload, nested_payload]
+
+    def _build_line_item(self, project_name: str, description_parts: list[str]) -> dict:
+        net = self.default_net_amount
+        tax_rate = self.default_tax_rate
+        gross = round(net * (1 + (tax_rate / 100.0)), 2)
+
+        return {
+            "type": "custom",
+            "name": f"Rechnung {project_name}"[:120],
+            "description": " | ".join([part for part in description_parts if part]),
+            "quantity": 1,
+            "unitName": "Stk",
+            "unitPrice": {
+                "currency": "EUR",
+                "netAmount": net,
+                "grossAmount": gross,
+                "taxRatePercentage": tax_rate,
+            },
         }
 
     def _as_lexware_datetime(self, value: str) -> str:
@@ -288,5 +326,11 @@ class LexwareDraftExportService:
     def _safe_float(self, value: str, fallback: float) -> float:
         try:
             return float(str(value).strip())
+        except Exception:
+            return fallback
+
+    def _safe_int(self, value: str, fallback: int) -> int:
+        try:
+            return int(str(value).strip())
         except Exception:
             return fallback
