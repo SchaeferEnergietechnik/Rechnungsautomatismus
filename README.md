@@ -24,6 +24,10 @@ Empfohlene Umgebungsvariablen:
 - `LEXWARE_TOKEN_URL`
 - `LEXWARE_COMPANY_ID`
 
+Testmodus-Hinweis (Angebote statt Rechnungen):
+- Standard fuer Draft-Export ist aktuell `LEXWARE_DRAFT_ENDPOINT=/v1/quotations`, damit Tests keine Rechnungen erzeugen.
+- Fuer den spaeteren Echtbetrieb auf Rechnungen den Endpoint auf `LEXWARE_DRAFT_ENDPOINT=/v1/invoices` setzen.
+
 Wichtig:
 - Keine Zugangsdaten in versionierte JSON-Dateien unter `config/` eintragen.
 - Keine Zugangsdaten per Git committen.
@@ -101,3 +105,20 @@ Hinweise:
 - `--dry-run` zeigt nur die erzeugte Payload und sendet nichts an Lexware.
 - Standardmäßig werden nur offene `einsatz`-Gruppen genommen.
 - Mit `--include-review` werden auch `prueffall`-Gruppen einbezogen.
+
+## Branch-Workflow (ab jetzt)
+
+- `main` bleibt stabil.
+- Neue Entwicklung immer in `feature/*` oder `fix/*`.
+- Merge nach `main` nur mit gruener CI und GUI-Smoketest.
+
+Siehe auch `CONTRIBUTING.md` fuer den konkreten Ablauf.
+
+## GitHub Actions CI
+
+Automatisch eingerichtet:
+- Workflow: `.github/workflows/ci.yml`
+- Testframework: `pytest`
+- Tests liegen unter `tests/`
+
+Die CI laeuft auf Push (`main`, `feature/*`, `fix/*`) und auf Pull Requests gegen `main`.

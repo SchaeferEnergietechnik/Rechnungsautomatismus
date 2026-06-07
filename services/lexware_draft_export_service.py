@@ -13,7 +13,7 @@ class LexwareDraftExportService:
         self.client_secret = os.getenv("LEXWARE_CLIENT_SECRET", "").strip()
         self.refresh_token = os.getenv("LEXWARE_REFRESH_TOKEN", "").strip()
         self.company_id = os.getenv("LEXWARE_COMPANY_ID", "").strip()
-        self.draft_endpoint = os.getenv("LEXWARE_DRAFT_ENDPOINT", "/v1/invoices").strip() or "/v1/invoices"
+        self.draft_endpoint = os.getenv("LEXWARE_DRAFT_ENDPOINT", "/v1/quotations").strip() or "/v1/quotations"
         self.token_url = os.getenv("LEXWARE_TOKEN_URL", "").strip()
         self.default_net_amount = self._safe_float(os.getenv("LEXWARE_DEFAULT_NET_AMOUNT", "1.0"), 1.0)
         self.default_tax_rate = self._safe_float(os.getenv("LEXWARE_DEFAULT_TAX_RATE", "19.0"), 19.0)
