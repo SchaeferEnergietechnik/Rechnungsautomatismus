@@ -439,6 +439,9 @@ class MainWindow(QMainWindow):
             "manueller_status": group.get("manueller_status", "offen"),
             "manuelle_notiz": group.get("manuelle_notiz", ""),
             "_last_changed_at": group.get("_last_changed_at", ""),
+            "lexware_export_status": group.get("lexware_export_status", ""),
+            "lexware_export_id": group.get("lexware_export_id", ""),
+            "lexware_exported_at": group.get("lexware_exported_at", ""),
         }
 
     def _restore_group_states(self, states: list[dict]) -> None:
@@ -449,6 +452,9 @@ class MainWindow(QMainWindow):
                 group["manueller_status"] = state_map[key].get("manueller_status", "offen")
                 group["manuelle_notiz"] = state_map[key].get("manuelle_notiz", "")
                 group["_last_changed_at"] = state_map[key].get("_last_changed_at", "")
+                group["lexware_export_status"] = state_map[key].get("lexware_export_status", "")
+                group["lexware_export_id"] = state_map[key].get("lexware_export_id", "")
+                group["lexware_exported_at"] = state_map[key].get("lexware_exported_at", "")
 
     def undo_last_action(self) -> None:
         if not self.last_action:
@@ -505,6 +511,9 @@ class MainWindow(QMainWindow):
             group.setdefault("manueller_status", "offen")
             group.setdefault("manuelle_notiz", "")
             group.setdefault("_last_changed_at", "")
+            group.setdefault("lexware_export_status", "")
+            group.setdefault("lexware_export_id", "")
+            group.setdefault("lexware_exported_at", "")
 
         self._apply_saved_manual_data()
 
@@ -682,6 +691,9 @@ class MainWindow(QMainWindow):
             project_data["groups"][key] = {
                 "manueller_status": group.get("manueller_status", "offen"),
                 "manuelle_notiz": group.get("manuelle_notiz", ""),
+                "lexware_export_status": group.get("lexware_export_status", ""),
+                "lexware_export_id": group.get("lexware_export_id", ""),
+                "lexware_exported_at": group.get("lexware_exported_at", ""),
             }
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -715,6 +727,9 @@ class MainWindow(QMainWindow):
                 "manueller_status": group.get("manueller_status", "offen"),
                 "manuelle_notiz": group.get("manuelle_notiz", ""),
                 "_last_changed_at": group.get("_last_changed_at", ""),
+                "lexware_export_status": group.get("lexware_export_status", ""),
+                "lexware_export_id": group.get("lexware_export_id", ""),
+                "lexware_exported_at": group.get("lexware_exported_at", ""),
             }
 
         with open(file_path, "w", encoding="utf-8") as f:
@@ -750,6 +765,9 @@ class MainWindow(QMainWindow):
                     group["manueller_status"] = entry.get("manueller_status", "offen")
                     group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
                     group["_last_changed_at"] = entry.get("_last_changed_at", "")
+                    group["lexware_export_status"] = entry.get("lexware_export_status", "")
+                    group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                    group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
 
         loaded_change_log = session_data.get("change_log", [])
         if not isinstance(loaded_change_log, list):
@@ -787,6 +805,9 @@ class MainWindow(QMainWindow):
                 elif isinstance(entry, dict):
                     group["manueller_status"] = entry.get("manueller_status", "offen")
                     group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
+                    group["lexware_export_status"] = entry.get("lexware_export_status", "")
+                    group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                    group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
 
         self._save_manual_data()
         self.last_action = None
@@ -874,11 +895,21 @@ class MainWindow(QMainWindow):
             )
             return
 
+        export_candidates = [g for g in selected_groups if not self._is_already_exported(g)]
+        skipped_count = len(selected_groups) - len(export_candidates)
+        if not export_candidates:
+            QMessageBox.information(
+                self,
+                "Lexware Draft Export",
+                "Alle ausgewählten Gruppen wurden bereits exportiert und werden nicht erneut erstellt.",
+            )
+            return
+
         ok_count = 0
         fail_count = 0
         first_error = ""
 
-        for group in selected_groups:
+        for group in export_candidates:
             result = self.lexware_export_service.export_group_as_draft(group)
 
             if result.get("success"):
@@ -894,10 +925,12 @@ class MainWindow(QMainWindow):
                     )
                 group["lexware_export_status"] = "exportiert"
                 group["lexware_export_id"] = export_id
+                group["lexware_exported_at"] = datetime.now().isoformat(timespec="seconds")
             else:
                 fail_count += 1
                 group["lexware_export_status"] = "fehler"
                 group["lexware_export_id"] = ""
+                group["lexware_exported_at"] = ""
                 if not first_error:
                     status = result.get("status_code")
                     err = result.get("error") or "Unbekannter Fehler"
@@ -906,24 +939,32 @@ class MainWindow(QMainWindow):
                     if response:
                         first_error += f" | Antwort: {response}"
 
-        self._mark_changed(selected_groups)
+        self._mark_changed(export_candidates)
+        self._save_manual_data()
         self.refresh_table()
 
-        self._log_action(f"Lexware Draft Export | erfolgreich: {ok_count} | fehlgeschlagen: {fail_count}")
+        self._log_action(
+            f"Lexware Draft Export | erfolgreich: {ok_count} | fehlgeschlagen: {fail_count} | uebersprungen: {skipped_count}"
+        )
 
         if fail_count == 0:
             QMessageBox.information(
                 self,
                 "Lexware Draft Export",
-                f"Export abgeschlossen. Erfolgreich: {ok_count}",
+                f"Export abgeschlossen. Erfolgreich: {ok_count}\nUebersprungen (bereits exportiert): {skipped_count}",
             )
             return
 
         QMessageBox.warning(
             self,
             "Lexware Draft Export mit Fehlern",
-            f"Erfolgreich: {ok_count}\nFehlgeschlagen: {fail_count}\n\nErster Fehler:\n{first_error}",
+            f"Erfolgreich: {ok_count}\nFehlgeschlagen: {fail_count}\nUebersprungen (bereits exportiert): {skipped_count}\n\nErster Fehler:\n{first_error}",
         )
+
+    def _is_already_exported(self, group: dict) -> bool:
+        if str(group.get("lexware_export_status", "")).strip().lower() != "exportiert":
+            return False
+        return bool(str(group.get("lexware_export_id", "")).strip())
 
     def refresh_table(self) -> None:
         auto_filter_text = self.auto_filter_combo.currentText()
@@ -1117,6 +1158,7 @@ class MainWindow(QMainWindow):
             f"Manuelle Notiz: {group.get('manuelle_notiz', '')}",
             f"Lexware Exportstatus: {group.get('lexware_export_status', '')}",
             f"Lexware Export-ID: {group.get('lexware_export_id', '')}",
+            f"Lexware Exportzeit: {group.get('lexware_exported_at', '')}",
             f"Status: {self._status_text(group)}",
             f"Automatischer Status: {group.get('gruppenstatus', '')}",
             f"Datum: {self._format_date_for_display(group.get('datum', ''))}",
@@ -1233,10 +1275,16 @@ class MainWindow(QMainWindow):
             key = self._build_group_key(group)
             manual_status = group.get("manueller_status", "offen")
             manual_note = group.get("manuelle_notiz", "")
-            if manual_status != "offen" or manual_note:
+            export_status = group.get("lexware_export_status", "")
+            export_id = group.get("lexware_export_id", "")
+            exported_at = group.get("lexware_exported_at", "")
+            if manual_status != "offen" or manual_note or export_status or export_id or exported_at:
                 manual_data[key] = {
                     "manueller_status": manual_status,
                     "manuelle_notiz": manual_note,
+                    "lexware_export_status": export_status,
+                    "lexware_export_id": export_id,
+                    "lexware_exported_at": exported_at,
                 }
 
         with open(data_file, "w", encoding="utf-8") as f:
@@ -1260,6 +1308,9 @@ class MainWindow(QMainWindow):
                 elif isinstance(entry, dict):
                     group["manueller_status"] = entry.get("manueller_status", "offen")
                     group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
+                    group["lexware_export_status"] = entry.get("lexware_export_status", "")
+                    group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                    group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
 
     def on_table_selection_changed(self) -> None:
         selected_groups = self._selected_groups()
