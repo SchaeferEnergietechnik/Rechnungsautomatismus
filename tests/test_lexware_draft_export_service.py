@@ -37,6 +37,28 @@ def test_payload_line_items_shape(monkeypatch):
     assert payload["lineItems"][0]["unitPrice"]["taxRatePercentage"] == service.default_tax_rate
 
 
+def test_quotation_payload_contains_expiration_date(monkeypatch):
+    monkeypatch.setenv("LEXWARE_DRAFT_ENDPOINT", "/v1/quotations")
+    monkeypatch.setenv("LEXWARE_PAYMENT_TERM_DAYS", "14")
+    service = LexwareDraftExportService()
+
+    payload = service._build_payload(_sample_group())
+
+    assert payload["title"] == "Angebot"
+    assert "expirationDate" in payload
+    assert str(payload["expirationDate"]).strip() != ""
+
+
+def test_invoice_payload_has_no_expiration_date(monkeypatch):
+    monkeypatch.setenv("LEXWARE_DRAFT_ENDPOINT", "/v1/invoices")
+    service = LexwareDraftExportService()
+
+    payload = service._build_payload(_sample_group())
+
+    assert payload["title"] == "Rechnung"
+    assert "expirationDate" not in payload
+
+
 def test_payload_variants_include_nested_fallback():
     service = LexwareDraftExportService()
     variants = service._build_payload_variants(_sample_group())

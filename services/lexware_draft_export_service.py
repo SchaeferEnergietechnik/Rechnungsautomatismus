@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib import parse
 from urllib import error, request
 
@@ -223,7 +223,7 @@ class LexwareDraftExportService:
 
         line_item = self._build_line_item(project_name, description_parts)
 
-        return {
+        payload = {
             "voucherStatus": "draft",
             "voucherDate": voucher_date,
             "address": {
@@ -248,10 +248,19 @@ class LexwareDraftExportService:
                 "shippingDate": voucher_date,
                 "shippingType": "service",
             },
-            "title": "Rechnung",
+            "title": "Angebot" if self._is_quotation_endpoint() else "Rechnung",
             "introduction": f"Automatisch erzeugter Entwurf für {project_name}",
             "remark": "Erzeugt durch Rechnungsautomatismus",
         }
+
+        # Quotations require an expirationDate in Lexware.
+        if self._is_quotation_endpoint():
+            payload["expirationDate"] = self._add_days_to_lexware_datetime(
+                voucher_date,
+                self.default_payment_term_days,
+            )
+
+        return payload
 
     def _build_payload_variants(self, group: dict) -> list[dict]:
         base_payload = self._build_payload(group)
@@ -314,6 +323,22 @@ class LexwareDraftExportService:
             pass
 
         return base_dt.isoformat(timespec="milliseconds")
+
+    def _is_quotation_endpoint(self) -> bool:
+        endpoint = str(self.draft_endpoint or "").strip().lower()
+        return "quotations" in endpoint
+
+    def _add_days_to_lexware_datetime(self, value: str, days: int) -> str:
+        base_dt = datetime.now().astimezone()
+        try:
+            parsed = datetime.fromisoformat(str(value or "").strip())
+        except Exception:
+            parsed = base_dt
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=base_dt.tzinfo)
+
+        return (parsed + timedelta(days=max(days, 0))).isoformat(timespec="milliseconds")
 
     def _try_parse_json(self, value: str):
         if not value:
