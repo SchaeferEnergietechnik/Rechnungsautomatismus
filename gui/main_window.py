@@ -33,6 +33,7 @@ class MainWindow(QMainWindow):
         "Datum",
         "KW",
         "Kunde",
+        "Kundenmatch",
         "Projekt",
         "Mitarbeiter",
         "Status",
@@ -43,17 +44,30 @@ class MainWindow(QMainWindow):
         "Notiz",
     ]
 
-    def __init__(self, config_loader, importer, extractor, classifier, builder, grouping, lexware_export_service=None) -> None:
+    def __init__(
+        self,
+        config_loader,
+        importer,
+        contacts_importer,
+        extractor,
+        classifier,
+        builder,
+        grouping,
+        invoice_mapper=None,
+        lexware_export_service=None,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Rechnungsvorschlag Tool")
         self.resize(2080, 1200)
 
         self.config_loader = config_loader
         self.importer = importer
+        self.contacts_importer = contacts_importer
         self.extractor = extractor
         self.classifier = classifier
         self.builder = builder
         self.grouping = grouping
+        self.invoice_mapper = invoice_mapper
         self.lexware_export_service = lexware_export_service
 
         self.current_file_path: str = ""
@@ -135,21 +149,22 @@ class MainWindow(QMainWindow):
 
         header = self.table_widget.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
-        for i in range(1, 11):
+        for i in range(1, 12):
             header.setSectionResizeMode(i, QHeaderView.Interactive)
-        header.setSectionResizeMode(11, QHeaderView.Stretch)
+        header.setSectionResizeMode(12, QHeaderView.Stretch)
 
         header.resizeSection(0, 36)
         header.resizeSection(1, 110)
         header.resizeSection(2, 70)
         header.resizeSection(3, 220)
-        header.resizeSection(4, 220)
-        header.resizeSection(5, 180)
-        header.resizeSection(6, 120)
-        header.resizeSection(7, 130)
-        header.resizeSection(8, 100)
-        header.resizeSection(9, 240)
-        header.resizeSection(10, 90)
+        header.resizeSection(4, 140)
+        header.resizeSection(5, 220)
+        header.resizeSection(6, 180)
+        header.resizeSection(7, 120)
+        header.resizeSection(8, 130)
+        header.resizeSection(9, 100)
+        header.resizeSection(10, 240)
+        header.resizeSection(11, 90)
 
         self.detail_view = QPlainTextEdit()
         self.detail_view.setReadOnly(True)
@@ -514,6 +529,11 @@ class MainWindow(QMainWindow):
             group.setdefault("lexware_export_status", "")
             group.setdefault("lexware_export_id", "")
             group.setdefault("lexware_exported_at", "")
+            group.setdefault("customer_match_state", "nicht_zugeordnet")
+            group.setdefault("customer_match_name", "")
+            group.setdefault("customer_match_number", "")
+
+        self._apply_customer_matching()
 
         self._apply_saved_manual_data()
 
@@ -528,6 +548,77 @@ class MainWindow(QMainWindow):
 
         if reset_session_state:
             self._log_action(f"Datei geladen | {file_path}")
+
+    def _load_contacts_for_matching(self) -> list[dict]:
+        if self.contacts_importer is None:
+            return []
+
+        paths: list[Path] = []
+        default_contacts = Path("contacts.csv")
+        if default_contacts.exists():
+            paths.append(default_contacts)
+
+        try:
+            mandants = self.config_loader.load_json("mandants.json").get("mandants", [])
+        except Exception:
+            mandants = []
+
+        for entry in mandants:
+            path_text = str((entry or {}).get("contacts_csv", "")).strip()
+            if not path_text:
+                continue
+            path_obj = Path(path_text)
+            if path_obj.exists():
+                paths.append(path_obj)
+
+        unique_paths: list[Path] = []
+        seen: set[str] = set()
+        for path_obj in paths:
+            key = str(path_obj.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_paths.append(path_obj)
+
+        contacts: list[dict] = []
+        for path_obj in unique_paths:
+            try:
+                contacts.extend(self.contacts_importer.load(str(path_obj)))
+            except Exception:
+                continue
+
+        return contacts
+
+    def _apply_customer_matching(self) -> None:
+        contacts = self._load_contacts_for_matching()
+
+        for group in self.groups:
+            group["customer_match_state"] = "nicht_zugeordnet"
+            group["customer_match_name"] = ""
+            group["customer_match_number"] = ""
+
+        if self.invoice_mapper is None:
+            return
+
+        for group in self.groups:
+            proposal = self.invoice_mapper.map_group(group, contacts=contacts)
+            match = proposal.customer_match
+            group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
+            group["customer_match_name"] = str(match.customer_name or "")
+            group["customer_match_number"] = str(match.customer_number or "")
+
+    def _customer_match_text(self, group: dict) -> str:
+        state = str(group.get("customer_match_state", "nicht_zugeordnet")).strip().lower()
+        if state == "eindeutig":
+            number = str(group.get("customer_match_number", "")).strip()
+            return f"Eindeutig ({number})" if number else "Eindeutig"
+        if state == "mehrdeutig":
+            return "Mehrdeutig"
+        if state == "nicht_gefunden":
+            return "Nicht gefunden"
+        if state == "nicht_zugeordnet":
+            return "Nicht zugeordnet"
+        return state
 
     def activate_open_only_mode(self) -> None:
         self.manual_filter_combo.setCurrentText("Offen")
@@ -823,7 +914,7 @@ class MainWindow(QMainWindow):
             writer = csv.writer(f, delimiter=";")
             writer.writerow([
                 "ManuellerStatus", "ManuelleNotiz", "Status", "Automatikstatus", "Datum", "KW",
-                "Kunde", "Projekt", "Adresse", "Ansprechpartner", "Auftrag", "Bemerkungen",
+                "Kunde", "Kundenmatch", "Kundennummer", "Projekt", "Adresse", "Ansprechpartner", "Auftrag", "Bemerkungen",
                 "Mitarbeiter", "RE", "Geaendert", "Klassifikationsgruende",
             ])
 
@@ -836,6 +927,8 @@ class MainWindow(QMainWindow):
                     self._format_date_for_display(group.get("datum", "")),
                     group.get("kw", ""),
                     group.get("kunde_roh", ""),
+                    self._customer_match_text(group),
+                    group.get("customer_match_number", ""),
                     group.get("projekt_roh", ""),
                     group.get("adresse_roh", ""),
                     group.get("ansprechpartner_roh", ""),
@@ -864,6 +957,9 @@ class MainWindow(QMainWindow):
                 "datum": self._format_date_for_display(group.get("datum", "")),
                 "kw": group.get("kw", ""),
                 "kunde_roh": group.get("kunde_roh", ""),
+                "customer_match_state": group.get("customer_match_state", ""),
+                "customer_match_name": group.get("customer_match_name", ""),
+                "customer_match_number": group.get("customer_match_number", ""),
                 "projekt_roh": group.get("projekt_roh", ""),
                 "adresse_roh": group.get("adresse_roh", ""),
                 "ansprechpartner_roh": group.get("ansprechpartner_roh", ""),
@@ -1017,6 +1113,7 @@ class MainWindow(QMainWindow):
                 self._format_date_for_display(group.get("datum", "")),
                 group.get("kw", ""),
                 group.get("kunde_roh", ""),
+                self._customer_match_text(group),
                 group.get("projekt_roh", ""),
                 ", ".join(group.get("mitarbeiter_liste", [])),
                 self._status_text(group),
@@ -1085,22 +1182,24 @@ class MainWindow(QMainWindow):
             if column == 3:
                 return g.get("kunde_roh", "").lower()
             if column == 4:
-                return g.get("projekt_roh", "").lower()
+                return self._customer_match_text(g).lower()
             if column == 5:
-                return ", ".join(g.get("mitarbeiter_liste", [])).lower()
+                return g.get("projekt_roh", "").lower()
             if column == 6:
+                return ", ".join(g.get("mitarbeiter_liste", [])).lower()
+            if column == 7:
                 order = {"Offen": 0, "Prüfen": 1, "Freigegeben": 2, "Ignorieren": 3, "Prüffall": 4}
                 return order.get(self._status_text(g), 99)
-            if column == 7:
+            if column == 8:
                 order = {"einsatz": 0, "prueffall": 1, "unbekannt": 2}
                 return order.get(g.get("gruppenstatus", ""), 99)
-            if column == 8:
-                return ", ".join(g.get("re_roh_liste", [])).lower()
             if column == 9:
-                return g.get("adresse_roh", "").lower()
+                return ", ".join(g.get("re_roh_liste", [])).lower()
             if column == 10:
-                return g.get("_last_changed_at", "")
+                return g.get("adresse_roh", "").lower()
             if column == 11:
+                return g.get("_last_changed_at", "")
+            if column == 12:
                 return g.get("manuelle_notiz", "").lower()
             return ""
 
@@ -1164,6 +1263,9 @@ class MainWindow(QMainWindow):
             f"Datum: {self._format_date_for_display(group.get('datum', ''))}",
             f"KW: {group.get('kw', '')}",
             f"Kunde: {group.get('kunde_roh', '')}",
+            f"Kundenmatch: {self._customer_match_text(group)}",
+            f"Zugeordneter Kunde: {group.get('customer_match_name', '')}",
+            f"Kundennummer: {group.get('customer_match_number', '')}",
             f"Projekt: {group.get('projekt_roh', '')}",
             f"Adresse: {group.get('adresse_roh', '')}",
             f"Ansprechpartner: {group.get('ansprechpartner_roh', '')}",
@@ -1238,6 +1340,9 @@ class MainWindow(QMainWindow):
             self._format_date_for_display(group.get("datum", "")),
             group.get("kw", ""),
             group.get("kunde_roh", ""),
+            self._customer_match_text(group),
+            group.get("customer_match_name", ""),
+            group.get("customer_match_number", ""),
             group.get("projekt_roh", ""),
             group.get("adresse_roh", ""),
             group.get("ansprechpartner_roh", ""),
