@@ -42,7 +42,7 @@ und soll als nächster großer Schritt erweitert werden zu:
 - `InvoiceProposalMapperService` integriert jetzt Positionserstellung und Validierung.
 - Bootstrap verdrahtet Position- und Validierungsservice.
 - VS-Code-Tasks für Starten/Testen vorhanden (`.vscode/tasks.json`).
-- Teststand: 66/66 Tests grün.
+- Teststand: 71/71 Tests grün.
 
 ## Update 2026-06-14 (Fahrtkosten)
 
@@ -69,7 +69,9 @@ und soll als nächster großer Schritt erweitert werden zu:
 
 ## Nächster Schritt (gemerkt für nächste Sitzung)
 
-- GUI um Validierungsstatus und Rechnungspositionen erweitern:
+- Erster Schritt: aktuellen Feature-Branch abschließen und nach `main` mergen.
+- Danach neue `feature/...`-Branch erstellen.
+- Anschließend fachlich weiter mit GUI-Validierungsstatus und Rechnungspositionen:
   - sichtbarer Validierungsstatus in Tabelle/Detailbereich
   - Positionsanzeige im Detailbereich
   - Export-Blockierung bei Validierungsfehlern

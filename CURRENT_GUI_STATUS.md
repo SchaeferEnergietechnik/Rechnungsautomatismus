@@ -5,7 +5,7 @@ Stand: 2026-06-14
 Letztes Update: 2026-06-14 (Spaet)
 
 Kurzstatistik:
-- Teststand: 66/66 Tests gruen (`pytest -q`)
+- Teststand: 71/71 Tests gruen (`pytest -q`)
 - Kundenadresse im Export aus Kundenmatch statt Projektadresse
 - Fahrtkostenberechnung als Hin- und Rueckfahrt
 
@@ -493,6 +493,8 @@ Das ist eine sehr gute Basis für den Rechnungs-MVP, weil bereits vorhanden sind
 - Exportgrundlagen
 
 ## Nächster Schritt
-Die GUI wird nun gezielt um Rechnungsentwurfs-Funktionen erweitert, nicht neu erfunden.
+Erster Schritt in der nächsten Sitzung:
+- aktuellen Feature-Branch abschließen und nach `main` mergen
+- danach neue `feature/...`-Branch erstellen und dort die nächsten GUI-Erweiterungen umsetzen
 
 ---

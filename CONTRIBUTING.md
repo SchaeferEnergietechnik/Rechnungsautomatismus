@@ -36,3 +36,10 @@ Bei jeder fachlichen oder GUI-relevanten Aenderung gilt:
 - Ist-Zustand in den Markdown-Dokumenten auf denselben Stand bringen
 - neue Umgebungsvariablen in `README.md` dokumentieren
 - offene Punkte in `IMPLEMENTATION_PLAN.md` nachziehen
+
+## Tagesabschluss-Hinweis (2026-06-14)
+
+- Naechster erster Schritt in der naechsten Sitzung:
+   - aktuellen Feature-Branch via PR abschliessen
+   - nach `main` mergen
+   - neue `feature/...`-Branch fuer die weitere Entwicklung starten

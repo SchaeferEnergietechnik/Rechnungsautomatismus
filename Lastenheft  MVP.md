@@ -4,6 +4,10 @@
 Stand: 2026-06-14
 Status: MVP-Fassung mit umgesetzten Erweiterungen
 
+Arbeitsstand Tagesabschluss 2026-06-14:
+- Teststand: 71/71 Tests gruen.
+- Erster Schritt in der naechsten Sitzung: Feature-Branch abschliessen, nach `main` mergen, danach neue `feature/...`-Branch erstellen.
+
 ---
 
 # 1. Ziel

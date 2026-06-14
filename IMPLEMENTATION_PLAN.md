@@ -63,7 +63,13 @@ Erledigt:
   - gematchte Kundenadresse wird fuer Lexware-Exportadresse verwendet
   - Fahrtkosten als Hin- und Rueckfahrt berechnet
   - Fahrtkostentext im Angebot ohne EUR-Betraege
-- Teststand: 66/66 Tests gruen.
+- Teststand: 71/71 Tests gruen.
+
+Tagesabschluss 2026-06-14:
+- Naechster erster Schritt in der naechsten Sitzung ist organisatorisch:
+  - Feature-Branch per PR abschliessen
+  - nach `main` mergen
+  - neue `feature/...`-Branch fuer die naechsten Umsetzungen starten
 
 Nächster Arbeitsblock:
 - Validierungs- und Exporthärtung:

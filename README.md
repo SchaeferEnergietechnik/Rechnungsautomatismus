@@ -24,7 +24,11 @@ Aktueller Funktionsstand:
 - Kundenmatch nutzt robusten CSV-Import mit Encoding-Fallback (utf-8-sig/cp1252/latin-1).
 - Fahrtkostenberechnung und -abrechnung erfolgt fuer Hin- und Rueckfahrt.
 - Angebotstext bei Fahrtkosten zeigt nur Stunden und KM (ohne EUR-Betraege im Text).
-- Teststand: 66/66 Tests gruen (`pytest -q`).
+- Teststand: 71/71 Tests gruen (`pytest -q`).
+
+Tagesabschluss 2026-06-14:
+- Naechster erster Schritt in der naechsten Sitzung: aktuellen Feature-Branch per PR abschliessen und nach `main` mergen.
+- Danach direkt neue Arbeits-Branch erstellen (`feature/...`) und dort weiterarbeiten.
 
 ## Lexware Zugangsdaten sicher speichern
 

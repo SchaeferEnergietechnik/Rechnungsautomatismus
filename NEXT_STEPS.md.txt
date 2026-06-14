@@ -53,9 +53,11 @@ Bereits umgesetzt:
 - Kontakte-CSV-Import für Matching robuster gemacht (utf-8-sig/cp1252/latin-1).
 - Fahrtkosten auf Hin- und Rückfahrt umgestellt.
 - Fahrtkostentext im Angebot ohne EUR-Beträge (nur Stunden und KM).
-- Teststand aktuell: 66/66.
+- Teststand aktuell: 71/71.
 
 Als nächstes umsetzen:
+- Erstschritt naechste Sitzung: Feature-Branch abschliessen und in `main` mergen.
+- Direkt danach neue `feature/...`-Branch erstellen.
 - Validierungs- und Exporttransparenz weiter erhöhen:
   - klarer Exporthinweis bei fehlender Geokodierung
   - optionale Distanzquelle (Routing statt Luftlinie)
