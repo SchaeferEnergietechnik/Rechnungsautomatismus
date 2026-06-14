@@ -20,6 +20,11 @@ Aktueller Funktionsstand:
 	- Modi `extra_article` und `included_in_first_article`
 - Separates Angebots-/Rechnungsfenster ist vorhanden.
 - Lexware-Textvorlagen werden per API geladen und kundenbezogen gefiltert.
+- Kundenadresse fuer den Export wird aus gematchten Kundendaten (contacts.csv) uebernommen.
+- Kundenmatch nutzt robusten CSV-Import mit Encoding-Fallback (utf-8-sig/cp1252/latin-1).
+- Fahrtkostenberechnung und -abrechnung erfolgt fuer Hin- und Rueckfahrt.
+- Angebotstext bei Fahrtkosten zeigt nur Stunden und KM (ohne EUR-Betraege im Text).
+- Teststand: 66/66 Tests gruen (`pytest -q`).
 
 ## Lexware Zugangsdaten sicher speichern
 

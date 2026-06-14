@@ -2,7 +2,12 @@
 ## Aktueller Stand der vorhandenen GUI
 
 Stand: 2026-06-14
-Letztes Update: 2026-06-14 (Abend)
+Letztes Update: 2026-06-14 (Spaet)
+
+Kurzstatistik:
+- Teststand: 66/66 Tests gruen (`pytest -q`)
+- Kundenadresse im Export aus Kundenmatch statt Projektadresse
+- Fahrtkostenberechnung als Hin- und Rueckfahrt
 
 ---
 

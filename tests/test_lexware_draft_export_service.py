@@ -124,6 +124,46 @@ def test_fetch_customers_normalizes_list(monkeypatch):
     assert result["customers"][1]["name"] == "Beta GmbH"
 
 
+def test_fetch_customers_loads_multiple_pages():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+
+    def _fake_get_json(url, company_id="", _retried=False):
+        if "page=0" in url:
+            return {
+                "success": True,
+                "status_code": 200,
+                "error": "",
+                "response": {
+                    "content": [
+                        {"id": "c1", "customerNumber": "1001", "name": "Alpha GmbH"},
+                    ],
+                    "totalPages": 2,
+                },
+            }
+        return {
+            "success": True,
+            "status_code": 200,
+            "error": "",
+            "response": {
+                "content": [
+                    {"id": "c2", "customerNumber": "1002", "name": "Zeta GmbH"},
+                ],
+                "totalPages": 2,
+            },
+        }
+
+    service._get_json = _fake_get_json
+
+    result = service.fetch_customers(company_id="company-x")
+
+    assert result["success"] is True
+    assert len(result["customers"]) == 2
+    assert result["customers"][0]["name"] == "Alpha GmbH"
+    assert result["customers"][1]["name"] == "Zeta GmbH"
+
+
 def test_fetch_text_templates_filters_customer(monkeypatch):
     service = LexwareDraftExportService()
     service.is_configured = lambda: True

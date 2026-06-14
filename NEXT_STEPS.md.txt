@@ -49,7 +49,11 @@ Bereits umgesetzt:
   - KM-Berechnung aus Mandantenadresse -> Einsatzadresse
   - editierbare Fahrtstunden/KM/Sätze pro Rechnung
   - Modus je Rechnung (`extra_article` / `included_in_first_article`)
-- Teststand aktuell: 37/37.
+- Kundenadresse im Export aus gematchten Kontaktdaten statt Projektadresse.
+- Kontakte-CSV-Import für Matching robuster gemacht (utf-8-sig/cp1252/latin-1).
+- Fahrtkosten auf Hin- und Rückfahrt umgestellt.
+- Fahrtkostentext im Angebot ohne EUR-Beträge (nur Stunden und KM).
+- Teststand aktuell: 66/66.
 
 Als nächstes umsetzen:
 - Validierungs- und Exporttransparenz weiter erhöhen:

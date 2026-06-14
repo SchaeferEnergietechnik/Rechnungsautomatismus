@@ -174,28 +174,83 @@ class LexwareDraftExportService:
                     "customers": [],
                 }
 
-        url = self._build_url_for_endpoint(self.customers_endpoint)
-        params = {}
+        base_url = self._build_url_for_endpoint(self.customers_endpoint)
         query_text = str(query or "").strip()
-        if query_text:
-            params["q"] = query_text
-        if params:
-            url = f"{url}?{parse.urlencode(params)}"
 
-        result = self._get_json(url, company_id=company_id)
-        if not result.get("success"):
-            return {
-                **result,
-                "customers": [],
-            }
+        page = 0
+        page_size = 200
+        max_pages = 30
+        collected_items: list[dict] = []
+        seen_page_signatures: set[str] = set()
+        last_result: dict | None = None
 
-        items = self._extract_list_payload(result.get("response"))
-        customers = [self._normalize_customer(item) for item in items if isinstance(item, dict)]
+        while page < max_pages:
+            params = {"page": page, "size": page_size}
+            if query_text:
+                params["q"] = query_text
+
+            url = f"{base_url}?{parse.urlencode(params)}"
+            result = self._get_json(url, company_id=company_id)
+            last_result = result
+            if not result.get("success"):
+                return {
+                    **result,
+                    "customers": [],
+                }
+
+            response = result.get("response")
+            items = [item for item in self._extract_list_payload(response) if isinstance(item, dict)]
+            collected_items.extend(items)
+
+            signature = "|".join(
+                str(item.get("id") or item.get("uuid") or item.get("contactId") or item.get("name") or "")
+                for item in items
+            )
+            if signature in seen_page_signatures:
+                break
+            seen_page_signatures.add(signature)
+
+            if not self._has_next_page(response, page, len(items), page_size):
+                break
+
+            page += 1
+
+        effective_result = last_result or {
+            "success": True,
+            "status_code": 200,
+            "error": "",
+            "response": None,
+        }
+
+        customers = [self._normalize_customer(item) for item in collected_items if isinstance(item, dict)]
         customers = [x for x in customers if x.get("name")]
         return {
-            **result,
+            **effective_result,
             "customers": customers,
         }
+
+    def _has_next_page(self, response, current_page: int, item_count: int, page_size: int) -> bool:
+        if isinstance(response, dict):
+            total_pages = response.get("totalPages")
+            try:
+                if total_pages is not None:
+                    return (current_page + 1) < int(total_pages)
+            except Exception:
+                pass
+
+            for flag_key in ["hasNext", "has_next", "nextPage", "next"]:
+                flag = response.get(flag_key)
+                if isinstance(flag, bool):
+                    return flag
+                if isinstance(flag, (int, float)):
+                    return bool(flag)
+
+            last_flag = response.get("last")
+            if isinstance(last_flag, bool):
+                return not last_flag
+
+        # Fallback: solange Seite voll ist, könnte es noch Folgeseiten geben.
+        return item_count >= max(int(page_size), 1)
 
     def fetch_text_templates(
         self,

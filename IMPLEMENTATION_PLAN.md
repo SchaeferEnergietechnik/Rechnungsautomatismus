@@ -2,7 +2,7 @@
 ## Konkreter Umsetzungsplan für die nächsten Coding-Schritte
 
 Stand: 2026-06-14
-Letztes Update: 2026-06-14 (Abend)
+Letztes Update: 2026-06-14 (Spaet)
 
 ---
 
@@ -58,6 +58,12 @@ Erledigt:
   - `InvoiceValidationService` ergänzt
   - `InvoiceProposalMapperService` integriert Positionen + Validierung
   - Bootstrap verdrahtet neue Services
+- Matching/Export weiter gehaertet:
+  - Kontakte-CSV-Import robust gegen Encodings (utf-8-sig/cp1252/latin-1)
+  - gematchte Kundenadresse wird fuer Lexware-Exportadresse verwendet
+  - Fahrtkosten als Hin- und Rueckfahrt berechnet
+  - Fahrtkostentext im Angebot ohne EUR-Betraege
+- Teststand: 66/66 Tests gruen.
 
 Nächster Arbeitsblock:
 - Validierungs- und Exporthärtung:

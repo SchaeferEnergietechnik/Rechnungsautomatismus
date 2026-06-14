@@ -42,7 +42,7 @@ und soll als nächster großer Schritt erweitert werden zu:
 - `InvoiceProposalMapperService` integriert jetzt Positionserstellung und Validierung.
 - Bootstrap verdrahtet Position- und Validierungsservice.
 - VS-Code-Tasks für Starten/Testen vorhanden (`.vscode/tasks.json`).
-- Teststand: 37/37 Tests grün.
+- Teststand: 66/66 Tests grün.
 
 ## Update 2026-06-14 (Fahrtkosten)
 
@@ -58,6 +58,14 @@ und soll als nächster großer Schritt erweitert werden zu:
 - Kundenspezifischer Modus-Default:
   - Standard `extra_article`
   - bei Kundenname enthält "Faber Etec" -> `included_in_first_article`
+
+## Update 2026-06-14 (Adress- und Matching-Fixes)
+
+- Exportadresse für Lexware nutzt jetzt die gematchte Kundenadresse statt der Projektadresse.
+- Kundenmatching wurde über robusten Kontakte-CSV-Import stabilisiert (Encoding-Fallback inkl. cp1252).
+- Gematchte Adressdaten (Straße/PLZ/Ort/Land) werden im Datenfluss persistiert und für den Export genutzt.
+- Fahrtkostenberechnung berücksichtigt jetzt Hin- und Rückfahrt.
+- Fahrtkostentext im Angebot zeigt nur Stunden und KM, keine EUR-Beträge im Beschreibungstext.
 
 ## Nächster Schritt (gemerkt für nächste Sitzung)
 

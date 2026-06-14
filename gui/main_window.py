@@ -388,8 +388,8 @@ class MainWindow(QMainWindow):
         draft_bar.setSpacing(8)
         draft_bar.addWidget(draft_title)
         compact_hint = QLabel(
-            "Bearbeitung von Belegtitel, Texten, Zahlungsziel und Fahrtkosten im separaten Fenster:"
-            " Angebot/Rechnung bearbeiten"
+            "Vorschau direkt hier. Erweiterte Bearbeitung (Belegtitel, Texte, Zahlungsziel, Lexware-Filter, Fahrtkosten)"
+            " im Fenster: Angebot/Rechnung bearbeiten"
         )
         compact_hint.setWordWrap(True)
         compact_hint.setStyleSheet("color: #5f6368;")
@@ -435,7 +435,7 @@ class MainWindow(QMainWindow):
         left_layout.addLayout(selection_action_bar)
         left_layout.addLayout(bulk_action_bar)
         left_layout.addLayout(summary_bar)
-        left_layout.addWidget(self.table_widget)
+        left_layout.addWidget(self.table_widget, 4)
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
@@ -460,6 +460,16 @@ class MainWindow(QMainWindow):
         log_section.setObjectName("rightSection")
         log_section.setLayout(log_bar)
 
+        lower_editor_splitter = QSplitter(Qt.Horizontal)
+        lower_editor_splitter.addWidget(draft_section)
+        lower_editor_splitter.addWidget(article_section)
+        lower_editor_splitter.setChildrenCollapsible(False)
+        lower_editor_splitter.setStretchFactor(0, 1)
+        lower_editor_splitter.setStretchFactor(1, 1)
+        lower_editor_splitter.setSizes([620, 620])
+
+        left_layout.addWidget(lower_editor_splitter, 2)
+
         right_widget.setStyleSheet(
             "QFrame#rightSection {"
             " border: 1px solid #d9dfe7;"
@@ -468,9 +478,7 @@ class MainWindow(QMainWindow):
             " }"
         )
 
-        right_layout.addWidget(detail_section, 3)
-        right_layout.addWidget(draft_section, 2)
-        right_layout.addWidget(article_section, 2)
+        right_layout.addWidget(detail_section, 4)
         right_layout.addWidget(log_section, 2)
 
         splitter = QSplitter(Qt.Horizontal)
