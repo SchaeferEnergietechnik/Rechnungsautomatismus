@@ -2,6 +2,7 @@
 ## Konkreter Umsetzungsplan für die nächsten Coding-Schritte
 
 Stand: 2026-06-14
+Letztes Update: 2026-06-14 (Abend)
 
 ---
 
@@ -25,13 +26,20 @@ Bereits vorhanden:
 - Statusworkflow
 - Notizen / Verlauf / Speichern / Laden
 - Export CSV/JSON
+- Mandantenlogik inkl. mandantenabhängiger Kontakte/Artikel
+- Kunden-Matching in GUI und Mapping
+- Mehrfach-Artikel und Positionsbildung
+- Draft-Felder und Persistenz (Titel/Einleitung/Nachbemerkung/Zahlungsziel)
+- Fahrtkostenlogik inkl. Routing und Exportintegration
+- separater Angebots-/Rechnungsdialog
+- Lexware-Templates und Kunden via API (mit kundenbezogener Filterung)
+- robuster CSV-Import (Encoding-Fallback)
 
 Noch nicht vorhanden:
-- mandantenfähiger Rechnungsentwurf
-- Kunden-/Artikel-Mapping
-- Rechnungspositionen
-- Rechnungsvalidierung
-- Lexware Draft Export aus GUI
+- vollständige Rechnungsadressbearbeitung als eigene Zieladresse
+- End-to-End Feldvalidierung mit klaren Exportblockern in der GUI
+- Final-/PDF-Flow
+- Logo-/Branding-Darstellung im Hauptfenster
 
 ## Fortschritt 2026-06-14
 
@@ -52,10 +60,11 @@ Erledigt:
   - Bootstrap verdrahtet neue Services
 
 Nächster Arbeitsblock:
-- GUI-Erweiterung für Rechnungsentwurfstransparenz:
-  - Validierungsstatus in GUI anzeigen
-  - Positionsdarstellung im Detailbereich
-  - Exportaktion bei Validierungsfehlern blockieren
+- Validierungs- und Exporthärtung:
+  - harte Exportblocker in GUI sichtbar machen
+  - Feldfehler pro Gruppe klar visualisieren
+  - Pflichtfelder vor Export vollständig prüfen
+  - Fehler-/Warnungs-Workflow für Sammel-Export ergänzen
 
 ---
 

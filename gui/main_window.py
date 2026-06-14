@@ -10,8 +10,12 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -91,6 +95,8 @@ class MainWindow(QMainWindow):
         self.current_sort_column = 1
         self.current_sort_order = Qt.AscendingOrder
         self._geo_cache: dict[str, tuple[float, float]] = {}
+        self._lexware_customers_cache: list[dict] = []
+        self._lexware_templates_cache: dict[str, list[dict]] = {}
 
         self.open_button = QPushButton("Datei öffnen")
         self.load_project_button = QPushButton("Projekt laden")
@@ -100,6 +106,7 @@ class MainWindow(QMainWindow):
         self.export_csv_button = QPushButton("CSV exportieren")
         self.export_json_button = QPushButton("JSON exportieren")
         self.lexware_export_button = QPushButton("Lexware Draft exportieren")
+        self.offer_editor_button = QPushButton("Angebot/Rechnung bearbeiten")
         
         self.mandant_combo = QComboBox()
         self.mandant_combo.setMinimumWidth(250)
@@ -304,6 +311,7 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.save_session_button)
         top_bar.addWidget(self.export_csv_button)
         top_bar.addWidget(self.export_json_button)
+        top_bar.addWidget(self.offer_editor_button)
         top_bar.addWidget(self.lexware_export_button)
         top_bar.addWidget(QLabel("Mandant:"))
         top_bar.addWidget(self.mandant_combo)
@@ -437,6 +445,7 @@ class MainWindow(QMainWindow):
         self.save_session_button.clicked.connect(self.save_session_file)
         self.export_csv_button.clicked.connect(self.export_visible_groups_to_csv)
         self.export_json_button.clicked.connect(self.export_visible_groups_to_json)
+        self.offer_editor_button.clicked.connect(self.open_offer_editor_dialog)
         self.lexware_export_button.clicked.connect(self.export_selected_groups_to_lexware_draft)
         self.save_note_button.clicked.connect(self.save_note_for_selected)
         self.undo_button.clicked.connect(self.undo_last_action)
@@ -567,8 +576,13 @@ class MainWindow(QMainWindow):
             return []
 
         try:
-            return articles_importer.load(articles_path)
-        except Exception:
+            rows = articles_importer.load(articles_path)
+            if hasattr(self, "change_log") and hasattr(self, "log_view"):
+                self._log_action(f"Artikel geladen | Mandant={mandant_id} | Datei={articles_path} | Anzahl={len(rows)}")
+            return rows
+        except Exception as exc:
+            if hasattr(self, "change_log") and hasattr(self, "log_view"):
+                self._log_action(f"Artikel laden fehlgeschlagen | Mandant={mandant_id} | Datei={articles_path} | Fehler={exc}")
             return []
 
     def _mandant_full_address(self, mandant_id: str) -> str:
@@ -588,6 +602,64 @@ class MainWindow(QMainWindow):
         ]
         return ", ".join(part for part in parts if part)
 
+    def _normalize_address_for_geocoding(self, address: str) -> str:
+        text = str(address or "").strip()
+        if not text:
+            return ""
+
+        # Entfernt Zusatzteile wie Google-Code/Koordinaten, damit Nominatim den Ort besser findet.
+        text = re.sub(r"Google-?Code\s*:[^,;\n]*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"Koordinaten\s*:[^,;\n]*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s+", " ", text).strip(" ,;")
+        return text
+
+    def _extract_coordinates_from_text(self, address: str) -> tuple[float, float] | None:
+        text = str(address or "").strip()
+        if not text:
+            return None
+
+        decimal_match = re.search(
+            r"(-?\d{1,2}(?:[\.,]\d+)?)\s*[,;/ ]\s*(-?\d{1,3}(?:[\.,]\d+)?)",
+            text,
+        )
+        if decimal_match:
+            try:
+                first = float(decimal_match.group(1).replace(",", "."))
+                second = float(decimal_match.group(2).replace(",", "."))
+                if abs(first) <= 90 and abs(second) <= 180:
+                    return (first, second)
+            except Exception:
+                pass
+
+        dms_matches = re.findall(
+            r"(\d{1,3})\s*[°º]\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:[\.,]\d+)?)\s*[\"”″]?\s*([NSEW])",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if len(dms_matches) >= 2:
+            coords = []
+            for deg, minutes, seconds, direction in dms_matches[:2]:
+                try:
+                    value = float(deg) + (float(minutes) / 60.0) + (float(str(seconds).replace(",", ".")) / 3600.0)
+                    if direction.upper() in {"S", "W"}:
+                        value = -value
+                    coords.append((direction.upper(), value))
+                except Exception:
+                    continue
+
+            if len(coords) == 2:
+                lat = None
+                lon = None
+                for direction, value in coords:
+                    if direction in {"N", "S"}:
+                        lat = value
+                    if direction in {"E", "W"}:
+                        lon = value
+                if lat is not None and lon is not None and abs(lat) <= 90 and abs(lon) <= 180:
+                    return (lat, lon)
+
+        return None
+
     def _geocode_address(self, address: str) -> tuple[float, float] | None:
         key = str(address or "").strip()
         if not key:
@@ -595,8 +667,19 @@ class MainWindow(QMainWindow):
         if key in self._geo_cache:
             return self._geo_cache[key]
 
+        extracted = self._extract_coordinates_from_text(key)
+        if extracted is not None:
+            self._geo_cache[key] = extracted
+            return extracted
+
+        query_text = self._normalize_address_for_geocoding(key)
+        if not query_text:
+            return None
+        if query_text in self._geo_cache:
+            return self._geo_cache[query_text]
+
         url = "https://nominatim.openstreetmap.org/search?" + parse.urlencode({
-            "q": key,
+            "q": query_text,
             "format": "json",
             "limit": 1,
         })
@@ -616,6 +699,7 @@ class MainWindow(QMainWindow):
             lat = float(item.get("lat"))
             lon = float(item.get("lon"))
             self._geo_cache[key] = (lat, lon)
+            self._geo_cache[query_text] = (lat, lon)
             return (lat, lon)
         except (error.URLError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             return None
@@ -673,7 +757,12 @@ class MainWindow(QMainWindow):
         end_coords = self._geocode_address(destination)
         if start_coords is None or end_coords is None:
             if show_messages:
-                QMessageBox.warning(self, "KM-Berechnung", "Adressen konnten nicht geocodiert werden.")
+                QMessageBox.warning(
+                    self,
+                    "KM-Berechnung",
+                    "Adressen konnten nicht geocodiert werden. "
+                    "Bitte Adresse prüfen oder Koordinaten im Feld hinterlegen (z.B. 50.123, 11.456).",
+                )
             return False
 
         distance = self._route_distance_km(start_coords, end_coords)
@@ -822,6 +911,10 @@ class MainWindow(QMainWindow):
         article_combo.blockSignals(False)
 
         self._update_article_summary(current_group)
+        if not self.current_articles:
+            mandant = self._get_mandant_by_id(mandant_id) or {}
+            products_csv = str(mandant.get("products_csv", "") or "")
+            article_summary_label.setText(f"Artikel: keine Daten geladen (Datei: {products_csv})")
         if article_list_widget is not None and current_group is not None:
             self._sync_article_list_widget(current_group)
 
@@ -1118,6 +1211,359 @@ class MainWindow(QMainWindow):
             "remark": remark_widget.toPlainText().strip() if remark_widget is not None else "Erzeugt durch Rechnungsautomatismus",
             "payment_term_days": payment_term_widget.value() if payment_term_widget is not None else 14,
         }
+
+    def _draft_templates_for_mandant(self) -> tuple[list[str], list[str]]:
+        mandant = self._get_mandant_by_id(self.active_mandant_id)
+        intro_templates = []
+        remark_templates = []
+
+        if mandant:
+            intro_templates = [
+                str(x).strip()
+                for x in mandant.get("draft_introduction_templates", [])
+                if str(x).strip()
+            ]
+            remark_templates = [
+                str(x).strip()
+                for x in mandant.get("draft_remark_templates", [])
+                if str(x).strip()
+            ]
+
+        intro_widget = getattr(self, "draft_introduction_edit", None)
+        remark_widget = getattr(self, "draft_remark_edit", None)
+        current_intro = str(intro_widget.toPlainText() if intro_widget is not None else "").strip()
+        current_remark = str(remark_widget.toPlainText() if remark_widget is not None else "").strip()
+
+        if current_intro and current_intro not in intro_templates:
+            intro_templates.insert(0, current_intro)
+        if current_remark and current_remark not in remark_templates:
+            remark_templates.insert(0, current_remark)
+
+        if not intro_templates:
+            intro_templates = ["Automatisch erzeugter Entwurf für das Angebot."]
+        if not remark_templates:
+            remark_templates = ["Erzeugt durch Rechnungsautomatismus"]
+
+        return intro_templates, remark_templates
+
+    def _current_voucher_type(self) -> str:
+        service = getattr(self, "lexware_export_service", None)
+        endpoint = str(getattr(service, "draft_endpoint", "") or "").lower()
+        if "invoice" in endpoint:
+            return "invoice"
+        return "quotation"
+
+    def _load_lexware_customers(self) -> tuple[list[dict], str]:
+        service = getattr(self, "lexware_export_service", None)
+        if service is None or not hasattr(service, "fetch_customers"):
+            return [], "Lexware Kunden-API nicht verfügbar."
+        if not service.is_configured():
+            return [], "Lexware nicht konfiguriert."
+
+        company_id = self._get_lexware_company_id_for_mandant(self.active_mandant_id)
+        result = service.fetch_customers(company_id=company_id)
+        if not result.get("success"):
+            return [], str(result.get("error", "Unbekannter API-Fehler"))
+
+        customers = result.get("customers", [])
+        if isinstance(customers, list):
+            self._lexware_customers_cache = [x for x in customers if isinstance(x, dict)]
+        return list(self._lexware_customers_cache), ""
+
+    def _load_lexware_templates(self, customer_number: str = "", customer_name: str = "") -> tuple[list[dict], str]:
+        service = getattr(self, "lexware_export_service", None)
+        if service is None or not hasattr(service, "fetch_text_templates"):
+            return [], "Lexware Vorlagen-API nicht verfügbar."
+        if not service.is_configured():
+            return [], "Lexware nicht konfiguriert."
+
+        voucher_type = self._current_voucher_type()
+        cache_key = "|".join([
+            voucher_type,
+            str(customer_number or "").strip().lower(),
+            str(customer_name or "").strip().lower(),
+        ])
+        if cache_key in self._lexware_templates_cache:
+            return list(self._lexware_templates_cache.get(cache_key, [])), ""
+
+        company_id = self._get_lexware_company_id_for_mandant(self.active_mandant_id)
+        result = service.fetch_text_templates(
+            voucher_type=voucher_type,
+            customer_number=customer_number,
+            customer_name=customer_name,
+            company_id=company_id,
+        )
+        if not result.get("success"):
+            return [], str(result.get("error", "Unbekannter API-Fehler"))
+
+        templates = result.get("templates", [])
+        normalized = [x for x in templates if isinstance(x, dict)] if isinstance(templates, list) else []
+        self._lexware_templates_cache[cache_key] = normalized
+        return list(normalized), ""
+
+    def _lexware_template_display_text(self, template: dict) -> str:
+        name = str(template.get("name", "") or "Vorlage").strip()
+        customer = str(template.get("customer_name", "") or "").strip()
+        customer_no = str(template.get("customer_number", "") or "").strip()
+
+        suffix_parts = []
+        if customer:
+            suffix_parts.append(customer)
+        if customer_no:
+            suffix_parts.append(f"Nr. {customer_no}")
+
+        if suffix_parts:
+            return f"{name} ({' | '.join(suffix_parts)})"
+        return name
+
+    def open_offer_editor_dialog(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Angebot / Rechnung bearbeiten")
+        dialog.resize(860, 760)
+
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+
+        title_edit = QLineEdit(self.draft_title_edit.text().strip())
+        intro_templates, remark_templates = self._draft_templates_for_mandant()
+
+        intro_template_combo = QComboBox()
+        intro_template_combo.addItems(intro_templates)
+        intro_edit = QPlainTextEdit(self.draft_introduction_edit.toPlainText().strip())
+        intro_edit.setMinimumHeight(90)
+
+        remark_template_combo = QComboBox()
+        remark_template_combo.addItems(remark_templates)
+        remark_edit = QPlainTextEdit(self.draft_remark_edit.toPlainText().strip())
+        remark_edit.setMinimumHeight(90)
+
+        lexware_customer_combo = QComboBox()
+        lexware_customer_combo.setMinimumWidth(380)
+        lexware_customer_combo.addItem("Aktueller Kunde (aus Auswahl)", "")
+
+        lexware_template_combo = QComboBox()
+        lexware_template_combo.setMinimumWidth(380)
+        lexware_template_combo.addItem("Keine Lexware-Vorlage geladen", -1)
+
+        lexware_status_label = QLabel("Lexware: noch nicht geladen")
+        lexware_load_button = QPushButton("Lexware Vorlagen laden")
+        customer_only_templates_check = QCheckBox("Nur kundenspezifische Vorlagen anzeigen")
+        customer_only_templates_check.setChecked(True)
+
+        def _apply_intro_template(index: int) -> None:
+            if 0 <= index < len(intro_templates):
+                intro_edit.setPlainText(intro_templates[index])
+
+        def _apply_remark_template(index: int) -> None:
+            if 0 <= index < len(remark_templates):
+                remark_edit.setPlainText(remark_templates[index])
+
+        intro_template_combo.currentIndexChanged.connect(_apply_intro_template)
+        remark_template_combo.currentIndexChanged.connect(_apply_remark_template)
+
+        group = self._current_group_for_article_editing()
+
+        current_customer_name = ""
+        current_customer_number = ""
+        if group is not None:
+            current_customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "") or "").strip()
+            current_customer_number = str(group.get("customer_match_number", "") or "").strip()
+
+        loaded_templates: list[dict] = []
+        all_templates: list[dict] = []
+
+        def _selected_customer_filter() -> tuple[str, str]:
+            selected_customer = lexware_customer_combo.currentData()
+            if isinstance(selected_customer, dict):
+                number = str(selected_customer.get("customer_number", "") or "").strip()
+                name = str(selected_customer.get("name", "") or "").strip()
+                return number, name
+            return current_customer_number, current_customer_name
+
+        def _populate_lexware_template_combo(templates: list[dict]) -> None:
+            lexware_template_combo.blockSignals(True)
+            lexware_template_combo.clear()
+            if not templates:
+                lexware_template_combo.addItem("Keine passende Lexware-Vorlage gefunden", -1)
+            else:
+                for idx, template in enumerate(templates):
+                    lexware_template_combo.addItem(self._lexware_template_display_text(template), idx)
+            lexware_template_combo.blockSignals(False)
+
+        def _filter_templates_for_ui(templates: list[dict]) -> list[dict]:
+            selected_customer = lexware_customer_combo.currentData()
+            selected_number = ""
+            selected_name = ""
+            if isinstance(selected_customer, dict):
+                selected_number = str(selected_customer.get("customer_number", "") or "").strip().lower()
+                selected_name = str(selected_customer.get("name", "") or "").strip().lower()
+            elif current_customer_number or current_customer_name:
+                selected_number = str(current_customer_number or "").strip().lower()
+                selected_name = str(current_customer_name or "").strip().lower()
+
+            if not customer_only_templates_check.isChecked():
+                return list(templates)
+
+            filtered = []
+            for template in templates:
+                t_number = str(template.get("customer_number", "") or "").strip().lower()
+                t_name = str(template.get("customer_name", "") or "").strip().lower()
+                if not (t_number or t_name):
+                    continue
+                if selected_number and t_number and selected_number in t_number:
+                    filtered.append(template)
+                    continue
+                if selected_name and t_name and selected_name in t_name:
+                    filtered.append(template)
+                    continue
+                if not selected_number and not selected_name:
+                    filtered.append(template)
+            return filtered
+
+        def _apply_lexware_template(index: int) -> None:
+            if not (0 <= index < len(loaded_templates)):
+                return
+            template = loaded_templates[index]
+            intro = str(template.get("introduction", "") or "").strip()
+            remark = str(template.get("remark", "") or "").strip()
+            if intro:
+                intro_edit.setPlainText(intro)
+            if remark:
+                remark_edit.setPlainText(remark)
+
+        def _load_lexware_templates_for_selected_customer() -> None:
+            customer_number, customer_name = _selected_customer_filter()
+            templates, error_text = self._load_lexware_templates(
+                customer_number=customer_number,
+                customer_name=customer_name,
+            )
+            all_templates.clear()
+            all_templates.extend(templates)
+            loaded_templates.clear()
+            loaded_templates.extend(_filter_templates_for_ui(all_templates))
+            _populate_lexware_template_combo(loaded_templates)
+
+            if error_text:
+                lexware_status_label.setText(f"Lexware: {error_text}")
+            else:
+                lexware_status_label.setText(
+                    f"Lexware: {len(all_templates)} geladen, {len(loaded_templates)} angezeigt"
+                )
+
+        def _load_lexware_data() -> None:
+            customers, customer_error = self._load_lexware_customers()
+            lexware_customer_combo.blockSignals(True)
+            lexware_customer_combo.clear()
+            lexware_customer_combo.addItem("Aktueller Kunde (aus Auswahl)", "")
+            for customer in customers:
+                name = str(customer.get("name", "") or "").strip()
+                number = str(customer.get("customer_number", "") or "").strip()
+                if not name:
+                    continue
+                text = f"{name}"
+                if number:
+                    text += f" (Nr. {number})"
+                lexware_customer_combo.addItem(text, customer)
+            lexware_customer_combo.blockSignals(False)
+
+            _load_lexware_templates_for_selected_customer()
+            if customer_error and not loaded_templates:
+                lexware_status_label.setText(f"Lexware: {customer_error}")
+
+        lexware_load_button.clicked.connect(_load_lexware_data)
+        lexware_customer_combo.currentIndexChanged.connect(lambda _: _load_lexware_templates_for_selected_customer())
+        lexware_template_combo.currentIndexChanged.connect(_apply_lexware_template)
+        customer_only_templates_check.stateChanged.connect(lambda _: _load_lexware_templates_for_selected_customer())
+
+        payment_days = QSpinBox()
+        payment_days.setRange(0, 365)
+        payment_days.setValue(int(self.draft_payment_term_days_spin.value()))
+        payment_days.setSuffix(" Tage netto")
+
+        form.addRow("Belegtitel", title_edit)
+        form.addRow("Einleitung Vorlage", intro_template_combo)
+        form.addRow("Einleitung", intro_edit)
+        form.addRow("Nachbemerkung Vorlage", remark_template_combo)
+        form.addRow("Nachbemerkung", remark_edit)
+        form.addRow("Lexware Kunde", lexware_customer_combo)
+        form.addRow("Lexware Vorlage", lexware_template_combo)
+        form.addRow("Filter", customer_only_templates_check)
+        form.addRow("Lexware", lexware_load_button)
+        form.addRow("Status", lexware_status_label)
+        form.addRow("Zahlungsziel", payment_days)
+
+        travel_mode_combo = QComboBox()
+        travel_mode_combo.addItem("Fahrtkosten als extra Artikel", "extra_article")
+        travel_mode_combo.addItem("Fahrtkosten im 1. Artikel enthalten", "included_in_first_article")
+        travel_hours = QDoubleSpinBox()
+        travel_hours.setRange(0.0, 1000.0)
+        travel_hours.setDecimals(2)
+        travel_hours.setSuffix(" h")
+        travel_km = QDoubleSpinBox()
+        travel_km.setRange(0.0, 100000.0)
+        travel_km.setDecimals(2)
+        travel_km.setSuffix(" km")
+        travel_hour_rate = QDoubleSpinBox()
+        travel_hour_rate.setRange(0.0, 10000.0)
+        travel_hour_rate.setDecimals(2)
+        travel_hour_rate.setPrefix("EUR ")
+        travel_km_rate = QDoubleSpinBox()
+        travel_km_rate.setRange(0.0, 100.0)
+        travel_km_rate.setDecimals(2)
+        travel_km_rate.setPrefix("EUR ")
+
+        if group is not None:
+            self._ensure_travel_fields_for_group(group)
+            mode_index = travel_mode_combo.findData(group.get("travel_mode", self._default_travel_mode_for_group(group)))
+            travel_mode_combo.setCurrentIndex(mode_index if mode_index >= 0 else 0)
+            travel_hours.setValue(float(group.get("travel_hours", 0.0) or 0.0))
+            travel_km.setValue(float(group.get("travel_km", 0.0) or 0.0))
+            travel_hour_rate.setValue(float(group.get("travel_hour_rate", 150.0) or 150.0))
+            travel_km_rate.setValue(float(group.get("travel_km_rate", 0.7) or 0.7))
+        else:
+            travel_mode_combo.setCurrentIndex(0)
+            travel_hours.setValue(0.0)
+            travel_km.setValue(0.0)
+            travel_hour_rate.setValue(150.0)
+            travel_km_rate.setValue(0.7)
+            for w in [travel_mode_combo, travel_hours, travel_km, travel_hour_rate, travel_km_rate]:
+                w.setEnabled(False)
+
+        form.addRow("Fahrtkostenmodus", travel_mode_combo)
+        form.addRow("Fahrtstunden", travel_hours)
+        form.addRow("Kilometer", travel_km)
+        form.addRow("Stundensatz", travel_hour_rate)
+        form.addRow("KM-Satz", travel_km_rate)
+
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        # Initialer Versuch, echte Lexware-Daten nachzuladen.
+        _load_lexware_data()
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.draft_title_edit.setText(title_edit.text().strip())
+        self.draft_introduction_edit.setPlainText(intro_edit.toPlainText().strip())
+        self.draft_remark_edit.setPlainText(remark_edit.toPlainText().strip())
+        self.draft_payment_term_days_spin.setValue(int(payment_days.value()))
+
+        if group is not None:
+            group["travel_mode"] = str(travel_mode_combo.currentData() or self._default_travel_mode_for_group(group))
+            group["travel_hours"] = float(travel_hours.value())
+            group["travel_km"] = float(travel_km.value())
+            group["travel_hour_rate"] = float(travel_hour_rate.value())
+            group["travel_km_rate"] = float(travel_km_rate.value())
+            self._sync_travel_editor_from_group(group)
+            self._mark_changed([group])
+            self._save_manual_data()
+            self.detail_view.setPlainText(self._build_detail_text(group))
+
+        self._update_draft_preview()
 
     def _default_travel_mode_for_group(self, group: dict) -> str:
         customer = str((group or {}).get("kunde_roh", "") or "").strip().lower()

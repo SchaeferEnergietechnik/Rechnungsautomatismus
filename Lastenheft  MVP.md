@@ -1,8 +1,8 @@
 # LASTENHEFT / MVP
 ## Rechnungstool für Lexware-Rechnungsentwürfe
 
-Stand: 2026-06-06  
-Status: Konsolidierte MVP-Fassung
+Stand: 2026-06-14
+Status: MVP-Fassung mit umgesetzten Erweiterungen
 
 ---
 
@@ -34,7 +34,7 @@ Nicht Bestandteil des MVP:
 - PDF automatisch herunterladen oder öffnen
 - Angebote automatisch in Rechnungen überführen
 - komplexe Rundreiseautomatik
-- Vorlagen-/Favoritensystem
+- vollstaendiges Vorlagen-/Favoritensystem (jenseits Basis-Textvorlagen)
 - vollständiger Excel-Lexware-Abgleich
 - automatisches Schreiben in die RE-Spalte
 
@@ -142,7 +142,8 @@ Das Zielobjekt des MVP ist:
 
 ## **Lexware-Rechnungsentwurf (Draft)**
 
-Nicht Angebot, nicht finale Rechnung.
+Im Testbetrieb kann der Draft-Endpunkt auf Angebote zeigen (`/v1/quotations`),
+im Echtbetrieb auf Rechnungen (`/v1/invoices`).
 
 Die technische Machbarkeit ist bereits nachgewiesen:
 - Lesen aus Lexware funktioniert
@@ -530,12 +531,25 @@ Nicht MVP, aber geplant:
 - PDF herunterladen
 - PDF per Button öffnen
 - Final-Export
-- Vorlagen
+- erweitertes Vorlagen-/Favoritensystem
 - Favoriten / Schnellcodes
 - Angebotsübernahme
 - Excel/Lexware-Abgleich
 - RE automatisch schreiben
 - komplexe Fahrt-/Rundreise-Logik
+
+---
+
+# 32. Umgesetzter Zusatzstand (2026-06-14)
+
+Bereits umgesetzt und im laufenden Stand aktiv:
+- Mandantenabhaengige Kontakte und Artikel
+- Kunden-Matching in der GUI
+- Mehrfach-Artikel je Vorschlag
+- Draft-Felder (Belegtitel/Einleitung/Nachbemerkung/Zahlungsziel) inkl. Persistenz
+- Fahrtkostenlogik mit Routing, manueller Uebersteuerung und Exportintegration
+- separates Angebots-/Rechnungsdialogfenster
+- Lexware API-Anbindung fuer Kunden und Textvorlagen inkl. kundenbezogenem Filter
 
 ---
 

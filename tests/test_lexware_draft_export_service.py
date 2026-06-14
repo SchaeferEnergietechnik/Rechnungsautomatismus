@@ -98,3 +98,63 @@ def test_detects_lineitems_validation_error():
         "response": {"message": "Invalid data received for field 'lineItems'."},
     }
     assert service._is_lineitems_validation_error(result) is True
+
+
+def test_fetch_customers_normalizes_list(monkeypatch):
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service._get_json = lambda url, company_id="", _retried=False: {
+        "success": True,
+        "status_code": 200,
+        "error": "",
+        "response": {
+            "content": [
+                {"id": "c1", "customerNumber": "1001", "name": "Alpha GmbH"},
+                {"id": "c2", "number": "1002", "displayName": "Beta GmbH"},
+            ]
+        },
+    }
+
+    result = service.fetch_customers(company_id="company-x")
+
+    assert result["success"] is True
+    assert len(result["customers"]) == 2
+    assert result["customers"][0]["customer_number"] == "1001"
+    assert result["customers"][1]["name"] == "Beta GmbH"
+
+
+def test_fetch_text_templates_filters_customer(monkeypatch):
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service._get_json = lambda url, company_id="", _retried=False: {
+        "success": True,
+        "status_code": 200,
+        "error": "",
+        "response": {
+            "items": [
+                {
+                    "id": "t1",
+                    "name": "Standard",
+                    "introduction": "Intro A",
+                    "remark": "Remark A",
+                    "customerNumber": "1001",
+                    "voucherType": "quotation",
+                },
+                {
+                    "id": "t2",
+                    "name": "Global",
+                    "introduction": "Intro B",
+                    "remark": "Remark B",
+                    "voucherType": "quotation",
+                },
+            ]
+        },
+    }
+
+    result = service.fetch_text_templates(voucher_type="quotation", customer_number="1001")
+
+    assert result["success"] is True
+    assert len(result["templates"]) == 2
+    assert result["templates"][0]["name"] == "Standard"

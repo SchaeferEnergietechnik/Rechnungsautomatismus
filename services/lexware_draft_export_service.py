@@ -18,6 +18,8 @@ class LexwareDraftExportService:
         self.company_id = os.getenv("LEXWARE_COMPANY_ID", "").strip()
         self.draft_endpoint = os.getenv("LEXWARE_DRAFT_ENDPOINT", "/v1/quotations").strip() or "/v1/quotations"
         self.token_url = os.getenv("LEXWARE_TOKEN_URL", "").strip()
+        self.templates_endpoint = os.getenv("LEXWARE_TEMPLATES_ENDPOINT", "/v1/text-modules").strip() or "/v1/text-modules"
+        self.customers_endpoint = os.getenv("LEXWARE_CUSTOMERS_ENDPOINT", "/v1/contacts").strip() or "/v1/contacts"
         self.default_net_amount = self._safe_float(os.getenv("LEXWARE_DEFAULT_NET_AMOUNT", "1.0"), 1.0)
         self.default_tax_rate = self._safe_float(os.getenv("LEXWARE_DEFAULT_TAX_RATE", "19.0"), 19.0)
         self.default_payment_term_days = self._safe_int(os.getenv("LEXWARE_PAYMENT_TERM_DAYS", "14"), 14)
@@ -151,6 +153,170 @@ class LexwareDraftExportService:
                 "payload": payload,
             }
 
+    def fetch_customers(self, query: str = "", company_id: str = "") -> dict:
+        if not self.is_configured():
+            return {
+                "success": False,
+                "status_code": None,
+                "error": "Lexware nicht konfiguriert (BASE_URL + ACCESS_TOKEN oder Refresh-Flow fehlen).",
+                "response": None,
+                "customers": [],
+            }
+
+        if not self.access_token:
+            refresh_result = self._refresh_access_token()
+            if not refresh_result.get("success"):
+                return {
+                    "success": False,
+                    "status_code": refresh_result.get("status_code"),
+                    "error": f"Token-Refresh fehlgeschlagen: {refresh_result.get('error')}",
+                    "response": refresh_result.get("response"),
+                    "customers": [],
+                }
+
+        url = self._build_url_for_endpoint(self.customers_endpoint)
+        params = {}
+        query_text = str(query or "").strip()
+        if query_text:
+            params["q"] = query_text
+        if params:
+            url = f"{url}?{parse.urlencode(params)}"
+
+        result = self._get_json(url, company_id=company_id)
+        if not result.get("success"):
+            return {
+                **result,
+                "customers": [],
+            }
+
+        items = self._extract_list_payload(result.get("response"))
+        customers = [self._normalize_customer(item) for item in items if isinstance(item, dict)]
+        customers = [x for x in customers if x.get("name")]
+        return {
+            **result,
+            "customers": customers,
+        }
+
+    def fetch_text_templates(
+        self,
+        voucher_type: str = "",
+        customer_number: str = "",
+        customer_name: str = "",
+        company_id: str = "",
+    ) -> dict:
+        if not self.is_configured():
+            return {
+                "success": False,
+                "status_code": None,
+                "error": "Lexware nicht konfiguriert (BASE_URL + ACCESS_TOKEN oder Refresh-Flow fehlen).",
+                "response": None,
+                "templates": [],
+            }
+
+        if not self.access_token:
+            refresh_result = self._refresh_access_token()
+            if not refresh_result.get("success"):
+                return {
+                    "success": False,
+                    "status_code": refresh_result.get("status_code"),
+                    "error": f"Token-Refresh fehlgeschlagen: {refresh_result.get('error')}",
+                    "response": refresh_result.get("response"),
+                    "templates": [],
+                }
+
+        normalized_voucher_type = str(voucher_type or "").strip().lower()
+        url = self._build_url_for_endpoint(self.templates_endpoint)
+        params = {}
+        if normalized_voucher_type:
+            params["voucherType"] = normalized_voucher_type
+        if params:
+            url = f"{url}?{parse.urlencode(params)}"
+
+        result = self._get_json(url, company_id=company_id)
+        if not result.get("success"):
+            return {
+                **result,
+                "templates": [],
+            }
+
+        items = self._extract_list_payload(result.get("response"))
+        templates = [
+            self._normalize_template(item)
+            for item in items
+            if isinstance(item, dict)
+        ]
+        templates = [x for x in templates if x.get("introduction") or x.get("remark")]
+
+        customer_number_norm = str(customer_number or "").strip().lower()
+        customer_name_norm = str(customer_name or "").strip().lower()
+        if customer_number_norm:
+            templates = [
+                x for x in templates
+                if not x.get("customer_number")
+                or customer_number_norm in str(x.get("customer_number", "")).strip().lower()
+            ]
+        if customer_name_norm:
+            templates = [
+                x for x in templates
+                if not x.get("customer_name")
+                or customer_name_norm in str(x.get("customer_name", "")).strip().lower()
+            ]
+
+        if normalized_voucher_type:
+            templates = [
+                x for x in templates
+                if not x.get("voucher_type")
+                or normalized_voucher_type in str(x.get("voucher_type", "")).strip().lower()
+            ]
+
+        return {
+            **result,
+            "templates": templates,
+        }
+
+    def _get_json(self, url: str, company_id: str = "", _retried: bool = False) -> dict:
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Accept": "application/json",
+        }
+        effective_company_id = str(company_id or self.company_id).strip()
+        if effective_company_id:
+            headers["X-LX-Company-ID"] = effective_company_id
+
+        req = request.Request(url, headers=headers, method="GET")
+        try:
+            with request.urlopen(req, timeout=30) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+                parsed = self._try_parse_json(text)
+                return {
+                    "success": 200 <= resp.status < 300,
+                    "status_code": resp.status,
+                    "error": "",
+                    "response": parsed if parsed is not None else text,
+                }
+        except error.HTTPError as exc:
+            text = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+            parsed = self._try_parse_json(text)
+
+            if exc.code == 401 and not _retried:
+                refresh_result = self._refresh_access_token()
+                if refresh_result.get("success"):
+                    return self._get_json(url, company_id=company_id, _retried=True)
+
+            return {
+                "success": False,
+                "status_code": exc.code,
+                "error": f"HTTP {exc.code}",
+                "response": parsed if parsed is not None else text,
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "status_code": None,
+                "error": str(exc),
+                "response": None,
+            }
+
     def _refresh_access_token(self) -> dict:
         if not (self.token_url and self.client_id and self.client_secret and self.refresh_token):
             return {
@@ -228,6 +394,94 @@ class LexwareDraftExportService:
         if self.draft_endpoint.startswith("http://") or self.draft_endpoint.startswith("https://"):
             return self.draft_endpoint
         return f"{self.base_url.rstrip('/')}/{self.draft_endpoint.lstrip('/')}"
+
+    def _build_url_for_endpoint(self, endpoint: str) -> str:
+        text = str(endpoint or "").strip()
+        if text.startswith("http://") or text.startswith("https://"):
+            return text
+        return f"{self.base_url.rstrip('/')}/{text.lstrip('/')}"
+
+    def _extract_list_payload(self, payload) -> list:
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+
+        for key in ["content", "items", "data", "results", "templates", "contacts"]:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+        return []
+
+    def _normalize_customer(self, item: dict) -> dict:
+        customer_id = str(item.get("id") or item.get("uuid") or item.get("contactId") or "").strip()
+        customer_number = str(item.get("customerNumber") or item.get("number") or item.get("contactNumber") or "").strip()
+
+        company = item.get("company") if isinstance(item.get("company"), dict) else {}
+        person = item.get("person") if isinstance(item.get("person"), dict) else {}
+        display_name = str(
+            item.get("name")
+            or item.get("displayName")
+            or company.get("name")
+            or " ".join(
+                x for x in [
+                    str(person.get("firstName", "") or "").strip(),
+                    str(person.get("lastName", "") or "").strip(),
+                ] if x
+            )
+            or ""
+        ).strip()
+
+        return {
+            "id": customer_id,
+            "customer_number": customer_number,
+            "name": display_name,
+            "raw": item,
+        }
+
+    def _normalize_template(self, item: dict) -> dict:
+        template_id = str(item.get("id") or item.get("uuid") or "").strip()
+        name = str(item.get("name") or item.get("title") or item.get("label") or "Vorlage").strip()
+
+        introduction = str(
+            item.get("introduction")
+            or item.get("intro")
+            or item.get("introductionText")
+            or item.get("header")
+            or ""
+        ).strip()
+        remark = str(
+            item.get("remark")
+            or item.get("footer")
+            or item.get("outro")
+            or item.get("remarkText")
+            or ""
+        ).strip()
+
+        customer_number = str(
+            item.get("customerNumber")
+            or item.get("contactNumber")
+            or item.get("customerNo")
+            or ""
+        ).strip()
+        customer_name = str(
+            item.get("customerName")
+            or item.get("contactName")
+            or item.get("customer")
+            or ""
+        ).strip()
+        voucher_type = str(item.get("voucherType") or item.get("type") or item.get("category") or "").strip()
+
+        return {
+            "id": template_id,
+            "name": name,
+            "introduction": introduction,
+            "remark": remark,
+            "customer_number": customer_number,
+            "customer_name": customer_name,
+            "voucher_type": voucher_type,
+            "raw": item,
+        }
 
     def _build_payload(
         self,

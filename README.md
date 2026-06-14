@@ -1,6 +1,26 @@
 # Rechnungsautomatismus
 Es wird ein Tool, welches Anhand der Temine Excel Rechnungen für Lexware vorbereitet
 
+## Stand 2026-06-14
+
+Aktueller Funktionsstand:
+- Mandantenspezifische Kontakte und Artikel aus CSV sind aktiv.
+- Mehrfach-Artikel pro Vorschlag sind in der GUI bearbeitbar.
+- Lexware-Draft-Export aus der GUI ist produktiv vorhanden (inkl. Duplikat-Schutz).
+- Draft-Felder sind editierbar und persistent:
+	- Belegtitel
+	- Einleitung
+	- Nachbemerkung
+	- Zahlungsziel
+- Fahrtkostenlogik ist integriert:
+	- Startadresse aus Mandant
+	- Zieladresse aus Einsatz
+	- echte Auto-Fahrstrecke (Routing)
+	- robuste Koordinaten-/Adressverarbeitung
+	- Modi `extra_article` und `included_in_first_article`
+- Separates Angebots-/Rechnungsfenster ist vorhanden.
+- Lexware-Textvorlagen werden per API geladen und kundenbezogen gefiltert.
+
 ## Lexware Zugangsdaten sicher speichern
 
 Lege echte Zugangsdaten nur lokal ab und teile sie nicht im Chat.
@@ -23,6 +43,8 @@ Empfohlene Umgebungsvariablen:
 - `LEXWARE_REFRESH_TOKEN`
 - `LEXWARE_TOKEN_URL`
 - `LEXWARE_COMPANY_ID`
+- `LEXWARE_TEMPLATES_ENDPOINT` (optional, Default: `/v1/text-modules`)
+- `LEXWARE_CUSTOMERS_ENDPOINT` (optional, Default: `/v1/contacts`)
 
 Wenn du mehrere Lexware-Accounts nutzt, kannst du je Mandant in `config/mandants.json` zusätzlich `lexware_company_id` pflegen. Der Export verwendet dann beim aktiven Mandanten diese Company-ID.
 
