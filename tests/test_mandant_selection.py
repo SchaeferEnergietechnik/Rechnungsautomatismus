@@ -352,8 +352,9 @@ def test_lexware_export_uses_active_mandant_company_id(config_loader, contacts_i
                 "response": {"id": "draft-1"},
             })
 
-            with patch('gui.main_window.QMessageBox.information'):
-                window.export_selected_groups_to_lexware_draft()
+            with patch('gui.main_window.QMessageBox.question', return_value=16384):
+                with patch('gui.main_window.QMessageBox.information'):
+                    window.export_selected_groups_to_lexware_draft()
 
             window.lexware_export_service.export_group_as_draft.assert_called_once()
             _, kwargs = window.lexware_export_service.export_group_as_draft.call_args

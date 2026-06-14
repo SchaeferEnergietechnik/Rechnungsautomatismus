@@ -752,6 +752,12 @@ class MainWindow(QMainWindow):
             return None
 
     def _route_distance_km(self, start: tuple[float, float], end: tuple[float, float]) -> float | None:
+        metrics = self._route_metrics(start, end)
+        if metrics is None:
+            return None
+        return metrics[0]
+
+    def _route_metrics(self, start: tuple[float, float], end: tuple[float, float]) -> tuple[float, float] | None:
         lat1, lon1 = start
         lat2, lon2 = end
         base_url = f"https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}"
@@ -774,9 +780,20 @@ class MainWindow(QMainWindow):
             if meters <= 0:
                 return None
 
-            return round(meters / 1000.0, 2)
+            duration_seconds = float(routes[0].get("duration", 0.0) or 0.0)
+            duration_hours = round(max(duration_seconds, 0.0) / 3600.0, 2)
+
+            return round(meters / 1000.0, 2), duration_hours
+
         except (error.URLError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             return None
+
+    def _estimate_travel_hours_from_km(self, distance_km: float) -> float:
+        # Fallback mit konservativem Mischwert für Landstraße/Ortsdurchfahrten.
+        average_speed_kmh = 70.0
+        if distance_km <= 0:
+            return 0.0
+        return round(distance_km / average_speed_kmh, 2)
 
     def _calculate_travel_km_for_selected(self) -> None:
         group = self._current_group_for_article_editing()
@@ -812,13 +829,31 @@ class MainWindow(QMainWindow):
                 )
             return False
 
-        distance = self._route_distance_km(start_coords, end_coords)
-        if distance is None:
+        metrics = self._route_metrics(start_coords, end_coords)
+        if metrics is None:
             if show_messages:
                 QMessageBox.warning(self, "KM-Berechnung", "Auto-Fahrstrecke konnte nicht berechnet werden.")
             return False
 
-        group["travel_km"] = distance
+        distance_km, duration_hours = metrics
+        if duration_hours <= 0:
+            duration_hours = self._estimate_travel_hours_from_km(distance_km)
+
+        group["travel_km"] = distance_km
+        group["travel_hours"] = duration_hours
+        group["travel_route_origin"] = origin
+        group["travel_route_destination"] = destination
+
+        if show_messages:
+            QMessageBox.information(
+                self,
+                "KM-Berechnung",
+                "Route berechnet.\n"
+                f"Start: {origin}\n"
+                f"Ziel: {destination}\n"
+                f"Strecke: {distance_km:.2f} km\n"
+                f"Fahrzeit: {duration_hours:.2f} h",
+            )
         return True
 
     def _article_key(self, article: dict) -> str:
@@ -1445,7 +1480,10 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
 
-        title_edit = QLineEdit(self.draft_title_edit.text().strip())
+        current_title = self.draft_title_edit.text().strip()
+        title_type_combo = QComboBox()
+        title_type_combo.addItem("Angebot", "Angebot")
+        title_type_combo.addItem("Rechnung", "Rechnung")
         intro_templates, remark_templates = self._draft_templates_for_mandant()
 
         intro_template_combo = QComboBox()
@@ -1483,6 +1521,27 @@ class MainWindow(QMainWindow):
         remark_template_combo.currentIndexChanged.connect(_apply_remark_template)
 
         group = self._current_group_for_article_editing()
+
+        project_name = ""
+        if group is not None:
+            project_name = str(group.get("projekt_roh", "") or "").strip()
+
+        initial_title_type = "Angebot"
+        if current_title.lower().startswith("rechnung"):
+            initial_title_type = "Rechnung"
+        title_type_index = title_type_combo.findData(initial_title_type)
+        title_type_combo.setCurrentIndex(title_type_index if title_type_index >= 0 else 0)
+
+        title_preview_label = QLabel()
+        title_preview_label.setWordWrap(True)
+
+        def _refresh_title_preview() -> None:
+            title_type = str(title_type_combo.currentData() or "Angebot").strip()
+            suffix = f" - {project_name}" if project_name else ""
+            title_preview_label.setText(f"{title_type}{suffix}")
+
+        title_type_combo.currentIndexChanged.connect(_refresh_title_preview)
+        _refresh_title_preview()
 
         current_customer_name = ""
         current_customer_number = ""
@@ -1601,7 +1660,8 @@ class MainWindow(QMainWindow):
         payment_days.setValue(int(self.draft_payment_term_days_spin.value()))
         payment_days.setSuffix(" Tage netto")
 
-        form.addRow("Belegtitel", title_edit)
+        form.addRow("Belegtyp", title_type_combo)
+        form.addRow("Belegtitel", title_preview_label)
         form.addRow("Einleitung Vorlage", intro_template_combo)
         form.addRow("Einleitung", intro_edit)
         form.addRow("Nachbemerkung Vorlage", remark_template_combo)
@@ -1656,6 +1716,12 @@ class MainWindow(QMainWindow):
         form.addRow("Stundensatz", travel_hour_rate)
         form.addRow("KM-Satz", travel_km_rate)
 
+        route_origin = str((group or {}).get("travel_route_origin", "") or self._mandant_full_address(self.active_mandant_id) or "-")
+        route_destination = str((group or {}).get("travel_route_destination", "") or (group or {}).get("adresse_roh", "") or "-")
+        route_label = QLabel(f"Start: {route_origin}\nZiel: {route_destination}")
+        route_label.setWordWrap(True)
+        form.addRow("Angenommene Route", route_label)
+
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
@@ -1668,7 +1734,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
 
-        self.draft_title_edit.setText(title_edit.text().strip())
+        self.draft_title_edit.setText(title_preview_label.text().strip())
         self.draft_introduction_edit.setPlainText(intro_edit.toPlainText().strip())
         self.draft_remark_edit.setPlainText(remark_edit.toPlainText().strip())
         self.draft_payment_term_days_spin.setValue(int(payment_days.value()))
@@ -2553,6 +2619,32 @@ class MainWindow(QMainWindow):
             )
             return
 
+        preview_lines = []
+        for idx, group in enumerate(export_candidates[:12], start=1):
+            preview_lines.append(
+                f"{idx}. {self._format_date_for_display(group.get('datum', ''))} | "
+                f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')}"
+            )
+        if len(export_candidates) > 12:
+            preview_lines.append(f"... +{len(export_candidates) - 12} weitere")
+
+        confirm_text = (
+            f"Ausgewählt: {len(selected_groups)} Gruppe(n)\n"
+            f"Wird exportiert: {len(export_candidates)} Gruppe(n)\n"
+            f"Übersprungen (bereits exportiert): {skipped_count}\n\n"
+            f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
+            "Jetzt exportieren?"
+        )
+        decision = QMessageBox.question(
+            self,
+            "Lexware Draft Export bestätigen",
+            confirm_text,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if decision != QMessageBox.Yes:
+            return
+
         ok_count = 0
         fail_count = 0
         first_error = ""
@@ -2828,6 +2920,8 @@ class MainWindow(QMainWindow):
             f"Fahrtkostenmodus: {group.get('travel_mode', self._default_travel_mode_for_group(group))}",
             f"Fahrtstunden: {group.get('travel_hours', 0.0)}",
             f"Fahrtkilometer: {group.get('travel_km', 0.0)}",
+            f"Routen-Start: {group.get('travel_route_origin', self._mandant_full_address(self.active_mandant_id))}",
+            f"Routen-Ziel: {group.get('travel_route_destination', group.get('adresse_roh', ''))}",
             f"Fahrtstundensatz: {group.get('travel_hour_rate', 150.0)} EUR",
             f"Fahrt-KM-Satz: {group.get('travel_km_rate', 0.7)} EUR",
             f"Fahrtkosten gesamt: {self._travel_amount_for_group(group)} EUR",
