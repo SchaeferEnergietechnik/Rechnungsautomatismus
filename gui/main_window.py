@@ -1,5 +1,6 @@
 ﻿import csv
 import json
+import math
 import re
 from datetime import datetime
 from pathlib import Path
@@ -179,8 +180,8 @@ class MainWindow(QMainWindow):
 
         self.travel_km_spin = QDoubleSpinBox()
         self.travel_km_spin.setRange(0.0, 100000.0)
-        self.travel_km_spin.setDecimals(2)
-        self.travel_km_spin.setSingleStep(1.0)
+        self.travel_km_spin.setDecimals(0)
+        self.travel_km_spin.setSingleStep(10.0)
         self.travel_km_spin.setSuffix(" km")
 
         self.travel_hour_rate_spin = QDoubleSpinBox()
@@ -781,9 +782,13 @@ class MainWindow(QMainWindow):
                 return None
 
             duration_seconds = float(routes[0].get("duration", 0.0) or 0.0)
-            duration_hours = round(max(duration_seconds, 0.0) / 3600.0, 2)
+            distance_raw_km = max(meters, 0.0) / 1000.0
+            distance_km = self._round_up_km_to_tens(distance_raw_km)
 
-            return round(meters / 1000.0, 2), duration_hours
+            duration_raw_hours = max(duration_seconds, 0.0) / 3600.0
+            duration_hours = self._round_up_to_quarter_hour(duration_raw_hours)
+
+            return distance_km, duration_hours
 
         except (error.URLError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             return None
@@ -793,7 +798,19 @@ class MainWindow(QMainWindow):
         average_speed_kmh = 70.0
         if distance_km <= 0:
             return 0.0
-        return round(distance_km / average_speed_kmh, 2)
+        return self._round_up_to_quarter_hour(distance_km / average_speed_kmh)
+
+    def _round_up_to_quarter_hour(self, hours: float) -> float:
+        value = float(hours or 0.0)
+        if value <= 0:
+            return 0.0
+        return round(math.ceil(value * 4.0) / 4.0, 2)
+
+    def _round_up_km_to_tens(self, distance_km: float) -> float:
+        value = float(distance_km or 0.0)
+        if value <= 0:
+            return 0.0
+        return float(int(math.ceil(value / 10.0) * 10))
 
     def _calculate_travel_km_for_selected(self) -> None:
         group = self._current_group_for_article_editing()
@@ -851,7 +868,7 @@ class MainWindow(QMainWindow):
                 "Route berechnet.\n"
                 f"Start: {origin}\n"
                 f"Ziel: {destination}\n"
-                f"Strecke: {distance_km:.2f} km\n"
+                f"Strecke: {int(round(distance_km))} km\n"
                 f"Fahrzeit: {duration_hours:.2f} h",
             )
         return True
@@ -1635,7 +1652,14 @@ class MainWindow(QMainWindow):
             all_templates.clear()
             all_templates.extend(templates)
             loaded_templates.clear()
-            loaded_templates.extend(_filter_templates_for_ui(all_templates))
+            filtered_templates = _filter_templates_for_ui(all_templates)
+            fallback_to_all = False
+            if not filtered_templates and all_templates and customer_only_templates_check.isChecked():
+                # UX-Fallback: lieber globale Vorlagen zeigen als leere Liste.
+                fallback_to_all = True
+                filtered_templates = list(all_templates)
+
+            loaded_templates.extend(filtered_templates)
             _populate_lexware_template_combo(loaded_templates)
 
             if error_text:
@@ -1643,9 +1667,10 @@ class MainWindow(QMainWindow):
                 endpoint = str(getattr(service, "templates_endpoint", "/v1/text-modules") or "/v1/text-modules")
                 lexware_status_label.setText(f"Lexware: {self._humanize_lexware_error(error_text, endpoint)}")
             else:
-                lexware_status_label.setText(
-                    f"Lexware: {len(all_templates)} geladen, {len(loaded_templates)} angezeigt"
-                )
+                status = f"Lexware: {len(all_templates)} geladen, {len(loaded_templates)} angezeigt"
+                if fallback_to_all:
+                    status += " (kundenbezogen 0 Treffer -> globale Vorlagen gezeigt)"
+                lexware_status_label.setText(status)
 
         def _load_lexware_data() -> None:
             customers, customer_error = self._load_lexware_customers()
@@ -1721,7 +1746,8 @@ class MainWindow(QMainWindow):
         travel_hours.setSuffix(" h")
         travel_km = QDoubleSpinBox()
         travel_km.setRange(0.0, 100000.0)
-        travel_km.setDecimals(2)
+        travel_km.setDecimals(0)
+        travel_km.setSingleStep(10.0)
         travel_km.setSuffix(" km")
         travel_hour_rate = QDoubleSpinBox()
         travel_hour_rate.setRange(0.0, 10000.0)
@@ -2958,7 +2984,7 @@ class MainWindow(QMainWindow):
             f"Artikel: {article_text}",
             f"Fahrtkostenmodus: {group.get('travel_mode', self._default_travel_mode_for_group(group))}",
             f"Fahrtstunden: {group.get('travel_hours', 0.0)}",
-            f"Fahrtkilometer: {group.get('travel_km', 0.0)}",
+            f"Fahrtkilometer: {int(round(float(group.get('travel_km', 0.0) or 0.0)))}",
             f"Routen-Start: {group.get('travel_route_origin', self._mandant_full_address(self.active_mandant_id))}",
             f"Routen-Ziel: {group.get('travel_route_destination', group.get('adresse_roh', ''))}",
             f"Fahrtstundensatz: {group.get('travel_hour_rate', 150.0)} EUR",

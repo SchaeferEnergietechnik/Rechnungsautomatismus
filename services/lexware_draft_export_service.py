@@ -225,27 +225,46 @@ class LexwareDraftExportService:
                 }
 
         normalized_voucher_type = str(voucher_type or "").strip().lower()
-        url = self._build_url_for_endpoint(self.templates_endpoint)
-        params = {}
-        if normalized_voucher_type:
-            params["voucherType"] = normalized_voucher_type
-        if params:
-            url = f"{url}?{parse.urlencode(params)}"
+        def _load_templates(use_voucher_filter: bool) -> dict:
+            url = self._build_url_for_endpoint(self.templates_endpoint)
+            params = {}
+            if use_voucher_filter and normalized_voucher_type:
+                params["voucherType"] = normalized_voucher_type
+            if params:
+                url = f"{url}?{parse.urlencode(params)}"
 
-        result = self._get_json(url, company_id=company_id)
-        if not result.get("success"):
+            result = self._get_json(url, company_id=company_id)
+            if not result.get("success"):
+                return {
+                    **result,
+                    "templates": [],
+                }
+
+            items = self._extract_list_payload(result.get("response"))
+            templates = [
+                self._normalize_template(item)
+                for item in items
+                if isinstance(item, dict)
+            ]
+            templates = [x for x in templates if x.get("introduction") or x.get("remark")]
             return {
                 **result,
-                "templates": [],
+                "templates": templates,
             }
 
-        items = self._extract_list_payload(result.get("response"))
-        templates = [
-            self._normalize_template(item)
-            for item in items
-            if isinstance(item, dict)
-        ]
-        templates = [x for x in templates if x.get("introduction") or x.get("remark")]
+        loaded = _load_templates(use_voucher_filter=True)
+        templates = loaded.get("templates", [])
+
+        # Fallback: einige Accounts liefern ohne voucherType-Filter, aber leer mit Filter.
+        if normalized_voucher_type and not templates and loaded.get("success"):
+            loaded = _load_templates(use_voucher_filter=False)
+            templates = loaded.get("templates", [])
+
+        if not loaded.get("success"):
+            return {
+                **loaded,
+                "templates": [],
+            }
 
         customer_number_norm = str(customer_number or "").strip().lower()
         customer_name_norm = str(customer_name or "").strip().lower()
@@ -270,7 +289,7 @@ class LexwareDraftExportService:
             ]
 
         return {
-            **result,
+            **loaded,
             "templates": templates,
         }
 
@@ -407,7 +426,7 @@ class LexwareDraftExportService:
         if not isinstance(payload, dict):
             return []
 
-        for key in ["content", "items", "data", "results", "templates", "contacts"]:
+        for key in ["content", "items", "data", "results", "templates", "contacts", "textModules", "modules"]:
             value = payload.get(key)
             if isinstance(value, list):
                 return value
@@ -437,6 +456,9 @@ class LexwareDraftExportService:
         if addresses:
             first_address = addresses[0] if isinstance(addresses[0], dict) else {}
             city = str(first_address.get("city") or first_address.get("locality") or "").strip()
+        if not city and isinstance(company, dict):
+            company_address = company.get("address") if isinstance(company.get("address"), dict) else {}
+            city = str(company_address.get("city") or company_address.get("locality") or "").strip()
         if not city:
             city = str(item.get("city") or item.get("ort") or item.get("Ort 1") or "").strip()
 
@@ -452,6 +474,9 @@ class LexwareDraftExportService:
         template_id = str(item.get("id") or item.get("uuid") or "").strip()
         name = str(item.get("name") or item.get("title") or item.get("label") or "Vorlage").strip()
 
+        module_type = str(item.get("moduleType") or item.get("textType") or item.get("kind") or "").strip().lower()
+        text_value = str(item.get("text") or item.get("content") or item.get("body") or "").strip()
+
         introduction = str(
             item.get("introduction")
             or item.get("intro")
@@ -466,6 +491,14 @@ class LexwareDraftExportService:
             or item.get("remarkText")
             or ""
         ).strip()
+
+        if text_value and not introduction and not remark:
+            if "intro" in module_type or "header" in module_type or "einleitung" in module_type:
+                introduction = text_value
+            elif "remark" in module_type or "footer" in module_type or "nachbemerk" in module_type:
+                remark = text_value
+            else:
+                introduction = text_value
 
         customer_number = str(
             item.get("customerNumber")
@@ -585,13 +618,14 @@ class LexwareDraftExportService:
             net = float(position.unit_price_net or self.default_net_amount)
             gross = round(net * (1 + (tax_rate / 100.0)), 2)
 
-            line_description_parts = [part for part in description_parts if part]
+            base_description = str(getattr(position, "description", "") or "").strip()
+            line_description_parts = [base_description] if base_description else [part for part in description_parts if part]
             if travel_detail:
                 is_first_item = index == 0
                 is_travel_item = "fahrtkosten" in str(position.title or "").strip().lower()
-                if travel_mode == "included_in_first_article" and is_first_item:
+                if travel_mode == "included_in_first_article" and is_first_item and travel_detail not in line_description_parts:
                     line_description_parts.append(travel_detail)
-                elif travel_mode == "extra_article" and is_travel_item:
+                elif travel_mode == "extra_article" and is_travel_item and travel_detail not in line_description_parts:
                     line_description_parts.append(travel_detail)
 
             line_items.append(

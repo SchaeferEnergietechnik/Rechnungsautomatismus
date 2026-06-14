@@ -41,3 +41,17 @@ def test_normalize_address_for_geocoding_removes_noise():
     assert "Google-Code" not in text
     assert "Koordinaten" not in text
     assert "07589 Lindenkreuz" in text
+
+
+def test_round_up_to_quarter_hour():
+    window = _window_without_init()
+
+    assert window._round_up_to_quarter_hour(5 + (10 / 60)) == 5.25
+    assert window._round_up_to_quarter_hour(1.0) == 1.0
+
+
+def test_round_up_km_to_tens():
+    window = _window_without_init()
+
+    assert window._round_up_km_to_tens(294.54) == 300.0
+    assert window._round_up_km_to_tens(300.0) == 300.0

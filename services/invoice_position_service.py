@@ -128,6 +128,11 @@ class InvoicePositionService:
             article_unit = str(article.get("Einheit", "") or "").strip() or "Stk"
             article_price = self._parse_decimal(article.get("VK (Netto)", "")) or 0.0
             article_tax_rate = self._parse_tax_rate(article.get("Steuerart", "")) or 19.0
+            article_description = str(article.get("Beschreibung", "") or "").strip()
+            article_note = str(article.get("Notiz", "") or "").strip()
+
+            description_parts = [part for part in [article_description, article_note] if part]
+            merged_description = "\n".join(description_parts)
 
             title_parts = []
             if article_number:
@@ -137,6 +142,7 @@ class InvoicePositionService:
             positions.append(
                 InvoicePosition(
                     title=" - ".join(title_parts),
+                    description=merged_description,
                     quantity=1.0,
                     unit=article_unit,
                     unit_price_net=article_price,
@@ -154,15 +160,21 @@ class InvoicePositionService:
         mode = str(group.get("travel_mode", "extra_article") or "extra_article").strip()
         if mode == "included_in_first_article" and positions:
             positions[0].unit_price_net = round(float(positions[0].unit_price_net or 0.0) + travel_amount, 2)
+            travel_detail = self.travel_detail_text(group)
+            if travel_detail:
+                prefix = str(positions[0].description or "").strip()
+                positions[0].description = (prefix + "\n" + travel_detail).strip() if prefix else travel_detail
             return
 
         if mode == "included_in_first_article" and not positions:
             mode = "extra_article"
 
         if mode == "extra_article":
+            travel_detail = self.travel_detail_text(group)
             positions.append(
                 InvoicePosition(
                     title="Fahrtkosten",
+                    description=travel_detail,
                     quantity=1.0,
                     unit="Pauschale",
                     unit_price_net=travel_amount,
@@ -179,9 +191,10 @@ class InvoicePositionService:
         km = self._as_float(group.get("travel_km", 0.0), 0.0)
         hour_rate = self._as_float(group.get("travel_hour_rate", 150.0), 0.0)
         km_rate = self._as_float(group.get("travel_km_rate", 0.7), 0.0)
+        km_display = int(round(km))
         return (
             f"Fahrtkostenangaben: {hours:.2f} h x {hour_rate:.2f} EUR + "
-            f"{km:.2f} km x {km_rate:.2f} EUR = {travel_amount:.2f} EUR"
+            f"{km_display} km x {km_rate:.2f} EUR = {travel_amount:.2f} EUR"
         )
 
     def _travel_amount(self, group: dict) -> float:

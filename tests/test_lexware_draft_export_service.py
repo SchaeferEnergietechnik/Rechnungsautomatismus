@@ -183,7 +183,7 @@ def test_payload_includes_travel_text_in_extra_article_description():
     assert len(payload["lineItems"]) == 2
     assert "Fahrtkostenangaben" not in payload["lineItems"][0]["description"]
     assert "Fahrtkostenangaben" in payload["lineItems"][1]["description"]
-    assert "10.00 km" in payload["lineItems"][1]["description"]
+    assert "10 km" in payload["lineItems"][1]["description"]
 
 
 def test_payload_includes_travel_text_in_first_article_description_when_included():
@@ -209,3 +209,94 @@ def test_payload_includes_travel_text_in_first_article_description_when_included
     assert len(payload["lineItems"]) == 1
     assert "Fahrtkostenangaben" in payload["lineItems"][0]["description"]
     assert "2.00 h" in payload["lineItems"][0]["description"]
+
+
+def test_fetch_text_templates_accepts_text_module_shape():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service._get_json = lambda url, company_id="", _retried=False: {
+        "success": True,
+        "status_code": 200,
+        "error": "",
+        "response": {
+            "textModules": [
+                {
+                    "id": "m1",
+                    "name": "Intro Modul",
+                    "moduleType": "introduction",
+                    "text": "Intro Text",
+                }
+            ]
+        },
+    }
+
+    result = service.fetch_text_templates(voucher_type="quotation")
+
+    assert result["success"] is True
+    assert len(result["templates"]) == 1
+    assert result["templates"][0]["introduction"] == "Intro Text"
+
+
+def test_fetch_text_templates_retries_without_voucher_type_filter():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+
+    calls = {"count": 0}
+
+    def _fake_get_json(url, company_id="", _retried=False):
+        calls["count"] += 1
+        if "voucherType=" in url:
+            return {
+                "success": True,
+                "status_code": 200,
+                "error": "",
+                "response": {"items": []},
+            }
+        return {
+            "success": True,
+            "status_code": 200,
+            "error": "",
+            "response": {
+                "items": [
+                    {
+                        "id": "t-fallback",
+                        "name": "Fallback Vorlage",
+                        "introduction": "Fallback Intro",
+                    }
+                ]
+            },
+        }
+
+    service._get_json = _fake_get_json
+
+    result = service.fetch_text_templates(voucher_type="quotation")
+
+    assert result["success"] is True
+    assert len(result["templates"]) == 1
+    assert result["templates"][0]["name"] == "Fallback Vorlage"
+    assert calls["count"] == 2
+
+
+def test_payload_preserves_article_description_text():
+    service = LexwareDraftExportService()
+    group = _sample_group()
+    group["selected_articles"] = [
+        {
+            "Artikelnummer": "ET-1",
+            "Bezeichnung": "Service",
+            "Beschreibung": "Originale Artikelbeschreibung",
+            "Notiz": "Interne Notiz aus Artikel",
+            "Einheit": "Stunde",
+            "Steuerart": "USt19",
+            "VK (Netto)": "200,00",
+        }
+    ]
+
+    payload = service._build_payload(group)
+
+    assert len(payload["lineItems"]) == 1
+    assert "Originale Artikelbeschreibung" in payload["lineItems"][0]["description"]
+    assert "Interne Notiz aus Artikel" in payload["lineItems"][0]["description"]
+    assert "Projekt:" not in payload["lineItems"][0]["description"]
