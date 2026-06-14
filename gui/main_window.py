@@ -2087,6 +2087,7 @@ class MainWindow(QMainWindow):
             "_last_changed_at": group.get("_last_changed_at", ""),
             "lexware_export_status": group.get("lexware_export_status", ""),
             "lexware_export_id": group.get("lexware_export_id", ""),
+            "lexware_export_resource_uri": group.get("lexware_export_resource_uri", ""),
             "lexware_exported_at": group.get("lexware_exported_at", ""),
             "travel_mode": group.get("travel_mode", ""),
             "travel_hours": group.get("travel_hours", 0.0),
@@ -2111,6 +2112,7 @@ class MainWindow(QMainWindow):
                 group["_last_changed_at"] = state_map[key].get("_last_changed_at", "")
                 group["lexware_export_status"] = state_map[key].get("lexware_export_status", "")
                 group["lexware_export_id"] = state_map[key].get("lexware_export_id", "")
+                group["lexware_export_resource_uri"] = state_map[key].get("lexware_export_resource_uri", "")
                 group["lexware_exported_at"] = state_map[key].get("lexware_exported_at", "")
                 group["travel_mode"] = state_map[key].get("travel_mode", self._default_travel_mode_for_group(group))
                 group["travel_hours"] = float(state_map[key].get("travel_hours", 0.0) or 0.0)
@@ -2178,6 +2180,7 @@ class MainWindow(QMainWindow):
             group.setdefault("_last_changed_at", "")
             group.setdefault("lexware_export_status", "")
             group.setdefault("lexware_export_id", "")
+            group.setdefault("lexware_export_resource_uri", "")
             group.setdefault("lexware_exported_at", "")
             group.setdefault("customer_match_state", "nicht_zugeordnet")
             group.setdefault("customer_match_name", "")
@@ -2434,6 +2437,7 @@ class MainWindow(QMainWindow):
                 "travel_km_rate": group.get("travel_km_rate", 0.7),
                 "lexware_export_status": group.get("lexware_export_status", ""),
                 "lexware_export_id": group.get("lexware_export_id", ""),
+                "lexware_export_resource_uri": group.get("lexware_export_resource_uri", ""),
                 "lexware_exported_at": group.get("lexware_exported_at", ""),
             }
 
@@ -2480,6 +2484,7 @@ class MainWindow(QMainWindow):
                 "_last_changed_at": group.get("_last_changed_at", ""),
                 "lexware_export_status": group.get("lexware_export_status", ""),
                 "lexware_export_id": group.get("lexware_export_id", ""),
+                "lexware_export_resource_uri": group.get("lexware_export_resource_uri", ""),
                 "lexware_exported_at": group.get("lexware_exported_at", ""),
             }
 
@@ -2547,6 +2552,7 @@ class MainWindow(QMainWindow):
                     group["travel_km_rate"] = float(entry.get("travel_km_rate", 0.7) or 0.7)
                     group["lexware_export_status"] = entry.get("lexware_export_status", "")
                     group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                    group["lexware_export_resource_uri"] = entry.get("lexware_export_resource_uri", "")
                     group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
 
         loaded_change_log = session_data.get("change_log", [])
@@ -2603,6 +2609,7 @@ class MainWindow(QMainWindow):
                             group["selected_article_key"] = entry.get("selected_article_key", "")
                     group["lexware_export_status"] = entry.get("lexware_export_status", "")
                     group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                    group["lexware_export_resource_uri"] = entry.get("lexware_export_resource_uri", "")
                     group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
                     group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
                     group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
@@ -2701,15 +2708,49 @@ class MainWindow(QMainWindow):
             )
             return
 
-        export_candidates = [g for g in selected_groups if not self._is_already_exported(g)]
-        skipped_count = len(selected_groups) - len(export_candidates)
-        if not export_candidates:
-            QMessageBox.information(
-                self,
-                "Lexware Draft Export",
-                "Alle ausgewählten Gruppen wurden bereits exportiert und werden nicht erneut erstellt.",
-            )
-            return
+        is_quotation_mode = bool(getattr(self.lexware_export_service, "is_quotation_mode", lambda: False)())
+        already_exported = [g for g in selected_groups if self._is_already_exported(g)]
+
+        export_mode = "create_new"
+        export_candidates: list[dict] = []
+        skipped_count = 0
+
+        if is_quotation_mode:
+            if already_exported:
+                mode_box = QMessageBox(self)
+                mode_box.setIcon(QMessageBox.Question)
+                mode_box.setWindowTitle("Angebotsexport: Vorgehen wählen")
+                mode_box.setText(
+                    f"{len(already_exported)} ausgewählte Gruppe(n) wurden bereits als Angebot exportiert."
+                )
+                mode_box.setInformativeText(
+                    "Ja = bestehende Angebote in Lexware überschreiben\n"
+                    "Nein = zusätzliche neue Angebote anlegen\n"
+                    "Abbrechen = Export abbrechen"
+                )
+                mode_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+                mode_box.setDefaultButton(QMessageBox.Yes)
+                mode_box.button(QMessageBox.Yes).setText("Überschreiben")
+                mode_box.button(QMessageBox.No).setText("Neu anlegen")
+                mode_box.button(QMessageBox.Cancel).setText("Abbrechen")
+
+                mode_result = mode_box.exec()
+                if mode_result == QMessageBox.Cancel:
+                    return
+                export_mode = "overwrite" if mode_result == QMessageBox.Yes else "create_new"
+
+            export_candidates = list(selected_groups)
+            skipped_count = 0
+        else:
+            export_candidates = [g for g in selected_groups if not self._is_already_exported(g)]
+            skipped_count = len(selected_groups) - len(export_candidates)
+            if not export_candidates:
+                QMessageBox.information(
+                    self,
+                    "Lexware Draft Export",
+                    "Alle ausgewählten Gruppen wurden bereits exportiert und werden nicht erneut erstellt.",
+                )
+                return
 
         preview_lines = []
         for idx, group in enumerate(export_candidates[:12], start=1):
@@ -2724,6 +2765,7 @@ class MainWindow(QMainWindow):
             f"Ausgewählt: {len(selected_groups)} Gruppe(n)\n"
             f"Wird exportiert: {len(export_candidates)} Gruppe(n)\n"
             f"Übersprungen (bereits exportiert): {skipped_count}\n\n"
+            f"Modus: {'Überschreiben bestehender Angebote' if export_mode == 'overwrite' else 'Neue Entwürfe anlegen'}\n\n"
             f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
             "Jetzt exportieren?"
         )
@@ -2745,6 +2787,8 @@ class MainWindow(QMainWindow):
         for group in export_candidates:
             mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
             company_id = self._get_lexware_company_id_for_mandant(mandant_id)
+            should_overwrite = is_quotation_mode and export_mode == "overwrite" and self._is_already_exported(group)
+            export_reference = self._export_reference_for_group(group) if should_overwrite else ""
             result = self.lexware_export_service.export_group_as_draft(
                 group,
                 company_id=company_id,
@@ -2752,26 +2796,32 @@ class MainWindow(QMainWindow):
                 introduction=export_settings["introduction"],
                 remark=export_settings["remark"],
                 payment_term_days=export_settings["payment_term_days"],
+                update_existing=should_overwrite,
+                export_reference=export_reference,
             )
 
             if result.get("success"):
                 ok_count += 1
                 response = result.get("response")
                 export_id = ""
+                export_resource_uri = ""
                 if isinstance(response, dict):
-                    export_id = str(
-                        response.get("id")
-                        or response.get("voucherNumber")
-                        or response.get("resourceUri")
-                        or ""
-                    )
+                    export_id = str(response.get("id") or response.get("voucherNumber") or "")
+                    export_resource_uri = str(response.get("resourceUri") or response.get("resourceURI") or "")
+                if not export_id:
+                    export_id = str(export_reference or "")
+                if not export_resource_uri and export_reference and "/" in export_reference:
+                    export_resource_uri = str(export_reference)
                 group["lexware_export_status"] = "exportiert"
                 group["lexware_export_id"] = export_id
+                group["lexware_export_resource_uri"] = export_resource_uri
                 group["lexware_exported_at"] = datetime.now().isoformat(timespec="seconds")
             else:
                 fail_count += 1
                 group["lexware_export_status"] = "fehler"
-                group["lexware_export_id"] = ""
+                if not self._is_already_exported(group):
+                    group["lexware_export_id"] = ""
+                    group["lexware_export_resource_uri"] = ""
                 group["lexware_exported_at"] = ""
                 if not first_error:
                     status = result.get("status_code")
@@ -2806,7 +2856,15 @@ class MainWindow(QMainWindow):
     def _is_already_exported(self, group: dict) -> bool:
         if str(group.get("lexware_export_status", "")).strip().lower() != "exportiert":
             return False
-        return bool(str(group.get("lexware_export_id", "")).strip())
+        export_id = str(group.get("lexware_export_id", "")).strip()
+        export_uri = str(group.get("lexware_export_resource_uri", "")).strip()
+        return bool(export_id or export_uri)
+
+    def _export_reference_for_group(self, group: dict) -> str:
+        export_uri = str(group.get("lexware_export_resource_uri", "")).strip()
+        if export_uri:
+            return export_uri
+        return str(group.get("lexware_export_id", "")).strip()
 
     def refresh_table(self) -> None:
         auto_filter_text = self.auto_filter_combo.currentText()
@@ -3019,6 +3077,7 @@ class MainWindow(QMainWindow):
             f"Fahrtkosten gesamt: {self._travel_amount_for_group(group)} EUR",
             f"Lexware Exportstatus: {group.get('lexware_export_status', '')}",
             f"Lexware Export-ID: {group.get('lexware_export_id', '')}",
+            f"Lexware Resource-URI: {group.get('lexware_export_resource_uri', '')}",
             f"Lexware Exportzeit: {group.get('lexware_exported_at', '')}",
             f"Status: {self._status_text(group)}",
             f"Automatischer Status: {group.get('gruppenstatus', '')}",
@@ -3152,8 +3211,9 @@ class MainWindow(QMainWindow):
             travel_km_rate = float(group.get("travel_km_rate", 0.7) or 0.7)
             export_status = group.get("lexware_export_status", "")
             export_id = group.get("lexware_export_id", "")
+            export_resource_uri = group.get("lexware_export_resource_uri", "")
             exported_at = group.get("lexware_exported_at", "")
-            if manual_status != "offen" or manual_note or selected_articles or selected_article_key or selected_article or export_status or export_id or exported_at or travel_hours or travel_km:
+            if manual_status != "offen" or manual_note or selected_articles or selected_article_key or selected_article or export_status or export_id or export_resource_uri or exported_at or travel_hours or travel_km:
                 manual_data[key] = {
                     "manueller_status": manual_status,
                     "manuelle_notiz": manual_note,
@@ -3167,6 +3227,7 @@ class MainWindow(QMainWindow):
                     "travel_km_rate": travel_km_rate,
                     "lexware_export_status": export_status,
                     "lexware_export_id": export_id,
+                    "lexware_export_resource_uri": export_resource_uri,
                     "lexware_exported_at": exported_at,
                 }
 
@@ -3214,6 +3275,7 @@ class MainWindow(QMainWindow):
                 group["travel_km_rate"] = float(entry.get("travel_km_rate", 0.7) or 0.7)
                 group["lexware_export_status"] = entry.get("lexware_export_status", "")
                 group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                group["lexware_export_resource_uri"] = entry.get("lexware_export_resource_uri", "")
                 group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
 
     def on_table_selection_changed(self) -> None:

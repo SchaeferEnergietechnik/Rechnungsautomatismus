@@ -42,6 +42,8 @@ class LexwareDraftExportService:
         remark: str = "",
         payment_term_days: int | None = None,
         payment_term_label: str = "",
+        update_existing: bool = False,
+        export_reference: str = "",
     ) -> dict:
         if not self.is_configured():
             return {
@@ -72,12 +74,16 @@ class LexwareDraftExportService:
             payment_term_label=payment_term_label,
         )
         payload = payload_variants[0]
-        url = self._build_url()
-        first_try = self._post_draft(url, payload, company_id=company_id)
+        if update_existing and str(export_reference or "").strip():
+            url = self._build_update_url(str(export_reference or "").strip())
+            first_try = self._update_draft(url, payload, company_id=company_id)
+        else:
+            url = self._build_url()
+            first_try = self._post_draft(url, payload, company_id=company_id)
         if first_try.get("success"):
             return first_try
 
-        if self._is_lineitems_validation_error(first_try):
+        if self._is_lineitems_validation_error(first_try) and not update_existing:
             for variant_payload in payload_variants[1:]:
                 retry_try = self._post_draft(url, variant_payload, company_id=company_id)
                 if retry_try.get("success"):
@@ -93,7 +99,10 @@ class LexwareDraftExportService:
             first_try["refresh_response"] = refresh_result.get("response")
             return first_try
 
-        second_try = self._post_draft(url, payload, company_id=company_id)
+        if update_existing and str(export_reference or "").strip():
+            second_try = self._update_draft(url, payload, company_id=company_id)
+        else:
+            second_try = self._post_draft(url, payload, company_id=company_id)
         if not second_try.get("success"):
             second_try["error"] = f"{second_try.get('error')} (nach Token-Refresh)"
         return second_try
@@ -122,6 +131,61 @@ class LexwareDraftExportService:
 
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         req = request.Request(url, data=body, headers=headers, method="POST")
+
+        try:
+            with request.urlopen(req, timeout=30) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+                parsed = self._try_parse_json(text)
+                return {
+                    "success": 200 <= resp.status < 300,
+                    "status_code": resp.status,
+                    "error": "",
+                    "response": parsed if parsed is not None else text,
+                    "payload": payload,
+                }
+        except error.HTTPError as exc:
+            text = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+            parsed = self._try_parse_json(text)
+            return {
+                "success": False,
+                "status_code": exc.code,
+                "error": f"HTTP {exc.code}",
+                "response": parsed if parsed is not None else text,
+                "payload": payload,
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "status_code": None,
+                "error": str(exc),
+                "response": None,
+                "payload": payload,
+            }
+
+    def _update_draft(self, url: str, payload: dict, company_id: str = "") -> dict:
+        put_try = self._send_draft_with_method("PUT", url, payload, company_id=company_id)
+        if put_try.get("success"):
+            return put_try
+
+        # Fallback: einige APIs akzeptieren PATCH statt PUT.
+        if put_try.get("status_code") in {400, 404, 405}:
+            patch_try = self._send_draft_with_method("PATCH", url, payload, company_id=company_id)
+            if patch_try.get("success"):
+                return patch_try
+        return put_try
+
+    def _send_draft_with_method(self, method: str, url: str, payload: dict, company_id: str = "") -> dict:
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        effective_company_id = str(company_id or self.company_id).strip()
+        if effective_company_id:
+            headers["X-LX-Company-ID"] = effective_company_id
+
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = request.Request(url, data=body, headers=headers, method=str(method or "POST").upper())
 
         try:
             with request.urlopen(req, timeout=30) as resp:
@@ -280,30 +344,62 @@ class LexwareDraftExportService:
                 }
 
         normalized_voucher_type = str(voucher_type or "").strip().lower()
+
         def _load_templates(use_voucher_filter: bool) -> dict:
-            url = self._build_url_for_endpoint(self.templates_endpoint)
-            params = {}
-            if use_voucher_filter and normalized_voucher_type:
-                params["voucherType"] = normalized_voucher_type
-            if params:
-                url = f"{url}?{parse.urlencode(params)}"
+            base_url = self._build_url_for_endpoint(self.templates_endpoint)
+            page = 0
+            page_size = 200
+            max_pages = 30
+            collected_items: list[dict] = []
+            seen_page_signatures: set[str] = set()
+            last_result: dict | None = None
 
-            result = self._get_json(url, company_id=company_id)
-            if not result.get("success"):
-                return {
-                    **result,
-                    "templates": [],
-                }
+            while page < max_pages:
+                params = {"page": page, "size": page_size}
+                if use_voucher_filter and normalized_voucher_type:
+                    params["voucherType"] = normalized_voucher_type
 
-            items = self._extract_list_payload(result.get("response"))
+                url = f"{base_url}?{parse.urlencode(params)}"
+                result = self._get_json(url, company_id=company_id)
+                last_result = result
+                if not result.get("success"):
+                    return {
+                        **result,
+                        "templates": [],
+                    }
+
+                response = result.get("response")
+                items = [item for item in self._extract_list_payload(response) if isinstance(item, dict)]
+                collected_items.extend(items)
+
+                signature = "|".join(
+                    str(item.get("id") or item.get("uuid") or item.get("name") or item.get("title") or "")
+                    for item in items
+                )
+                if signature in seen_page_signatures:
+                    break
+                seen_page_signatures.add(signature)
+
+                if not self._has_next_page(response, page, len(items), page_size):
+                    break
+
+                page += 1
+
+            effective_result = last_result or {
+                "success": True,
+                "status_code": 200,
+                "error": "",
+                "response": None,
+            }
+
             templates = [
                 self._normalize_template(item)
-                for item in items
+                for item in collected_items
                 if isinstance(item, dict)
             ]
-            templates = [x for x in templates if x.get("introduction") or x.get("remark")]
+            templates = [x for x in templates if x.get("name")]
             return {
-                **result,
+                **effective_result,
                 "templates": templates,
             }
 
@@ -475,6 +571,16 @@ class LexwareDraftExportService:
             return text
         return f"{self.base_url.rstrip('/')}/{text.lstrip('/')}"
 
+    def _build_update_url(self, export_reference: str) -> str:
+        reference = str(export_reference or "").strip()
+        if not reference:
+            return self._build_url()
+        if reference.startswith("http://") or reference.startswith("https://"):
+            return reference
+        if reference.startswith("/"):
+            return self._build_url_for_endpoint(reference)
+        return f"{self._build_url().rstrip('/')}/{parse.quote(reference, safe='')}"
+
     def _extract_list_payload(self, payload) -> list:
         if isinstance(payload, list):
             return payload
@@ -530,22 +636,20 @@ class LexwareDraftExportService:
         name = str(item.get("name") or item.get("title") or item.get("label") or "Vorlage").strip()
 
         module_type = str(item.get("moduleType") or item.get("textType") or item.get("kind") or "").strip().lower()
-        text_value = str(item.get("text") or item.get("content") or item.get("body") or "").strip()
+        text_value = self._extract_text_value(item.get("text")) or self._extract_text_value(item.get("content")) or self._extract_text_value(item.get("body"))
 
-        introduction = str(
-            item.get("introduction")
-            or item.get("intro")
-            or item.get("introductionText")
-            or item.get("header")
-            or ""
-        ).strip()
-        remark = str(
-            item.get("remark")
-            or item.get("footer")
-            or item.get("outro")
-            or item.get("remarkText")
-            or ""
-        ).strip()
+        introduction = (
+            self._extract_text_value(item.get("introduction"))
+            or self._extract_text_value(item.get("intro"))
+            or self._extract_text_value(item.get("introductionText"))
+            or self._extract_text_value(item.get("header"))
+        )
+        remark = (
+            self._extract_text_value(item.get("remark"))
+            or self._extract_text_value(item.get("footer"))
+            or self._extract_text_value(item.get("outro"))
+            or self._extract_text_value(item.get("remarkText"))
+        )
 
         if text_value and not introduction and not remark:
             if "intro" in module_type or "header" in module_type or "einleitung" in module_type:
@@ -579,6 +683,21 @@ class LexwareDraftExportService:
             "voucher_type": voucher_type,
             "raw": item,
         }
+
+    def _extract_text_value(self, value) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ["text", "content", "value", "body", "message"]:
+                nested = self._extract_text_value(value.get(key))
+                if nested:
+                    return nested
+            return ""
+        if isinstance(value, list):
+            parts = [self._extract_text_value(item) for item in value]
+            parts = [p for p in parts if p]
+            return "\n".join(parts).strip()
+        return ""
 
     def _build_payload(
         self,
@@ -785,6 +904,9 @@ class LexwareDraftExportService:
     def _is_quotation_endpoint(self) -> bool:
         endpoint = str(self.draft_endpoint or "").strip().lower()
         return "quotations" in endpoint
+
+    def is_quotation_mode(self) -> bool:
+        return self._is_quotation_endpoint()
 
     def _add_days_to_lexware_datetime(self, value: str, days: int) -> str:
         base_dt = datetime.now().astimezone()

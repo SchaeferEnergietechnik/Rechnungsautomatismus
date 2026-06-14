@@ -321,6 +321,114 @@ def test_fetch_text_templates_retries_without_voucher_type_filter():
     assert calls["count"] == 2
 
 
+def test_fetch_text_templates_loads_multiple_pages():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+
+    def _fake_get_json(url, company_id="", _retried=False):
+        if "page=0" in url:
+            return {
+                "success": True,
+                "status_code": 200,
+                "error": "",
+                "response": {
+                    "items": [
+                        {"id": "t1", "name": "Vorlage A", "introduction": "A"},
+                    ],
+                    "totalPages": 2,
+                },
+            }
+        return {
+            "success": True,
+            "status_code": 200,
+            "error": "",
+            "response": {
+                "items": [
+                    {"id": "t2", "name": "Vorlage B", "remark": "B"},
+                ],
+                "totalPages": 2,
+            },
+        }
+
+    service._get_json = _fake_get_json
+    result = service.fetch_text_templates(voucher_type="quotation")
+
+    assert result["success"] is True
+    assert len(result["templates"]) == 2
+    assert result["templates"][0]["name"] == "Vorlage A"
+    assert result["templates"][1]["name"] == "Vorlage B"
+
+
+def test_fetch_text_templates_keeps_name_only_templates():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service._get_json = lambda url, company_id="", _retried=False: {
+        "success": True,
+        "status_code": 200,
+        "error": "",
+        "response": {
+            "items": [
+                {"id": "t-name-only", "name": "Nur Name"},
+            ]
+        },
+    }
+
+    result = service.fetch_text_templates(voucher_type="quotation")
+
+    assert result["success"] is True
+    assert len(result["templates"]) == 1
+    assert result["templates"][0]["name"] == "Nur Name"
+
+
+def test_build_update_url_from_resource_uri():
+    service = LexwareDraftExportService()
+    service.base_url = "https://api.lexware.io"
+    service.draft_endpoint = "/v1/quotations"
+
+    absolute = service._build_update_url("https://api.lexware.io/v1/quotations/abc")
+    relative = service._build_update_url("/v1/quotations/abc")
+    by_id = service._build_update_url("abc")
+
+    assert absolute == "https://api.lexware.io/v1/quotations/abc"
+    assert relative == "https://api.lexware.io/v1/quotations/abc"
+    assert by_id == "https://api.lexware.io/v1/quotations/abc"
+
+
+def test_export_group_as_draft_uses_update_when_requested():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service.base_url = "https://api.lexware.io"
+    service.draft_endpoint = "/v1/quotations"
+    service._build_payload_variants = lambda *args, **kwargs: [{"title": "x"}]
+
+    calls = {"update": 0, "post": 0}
+
+    def _fake_update(url, payload, company_id=""):
+        calls["update"] += 1
+        assert url.endswith("/v1/quotations/existing-1")
+        return {"success": True, "status_code": 200, "error": "", "response": {"id": "existing-1"}, "payload": payload}
+
+    def _fake_post(url, payload, company_id=""):
+        calls["post"] += 1
+        return {"success": True, "status_code": 200, "error": "", "response": {"id": "new-1"}, "payload": payload}
+
+    service._update_draft = _fake_update
+    service._post_draft = _fake_post
+
+    result = service.export_group_as_draft(
+        _sample_group(),
+        update_existing=True,
+        export_reference="existing-1",
+    )
+
+    assert result["success"] is True
+    assert calls["update"] == 1
+    assert calls["post"] == 0
+
+
 def test_payload_preserves_article_description_text():
     service = LexwareDraftExportService()
     group = _sample_group()
