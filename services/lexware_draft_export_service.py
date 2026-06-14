@@ -432,10 +432,19 @@ class LexwareDraftExportService:
             or ""
         ).strip()
 
+        city = ""
+        addresses = item.get("addresses") if isinstance(item.get("addresses"), list) else []
+        if addresses:
+            first_address = addresses[0] if isinstance(addresses[0], dict) else {}
+            city = str(first_address.get("city") or first_address.get("locality") or "").strip()
+        if not city:
+            city = str(item.get("city") or item.get("ort") or item.get("Ort 1") or "").strip()
+
         return {
             "id": customer_id,
             "customer_number": customer_number,
             "name": display_name,
+            "city": city,
             "raw": item,
         }
 

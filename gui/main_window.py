@@ -1472,6 +1472,21 @@ class MainWindow(QMainWindow):
             return f"{name} ({' | '.join(suffix_parts)})"
         return name
 
+    def _normalize_customer_lookup_text(self, value: str) -> str:
+        text = str(value or "").strip().lower()
+        text = re.sub(r"[^a-z0-9]+", " ", text)
+        tokens = [t for t in text.split() if t and t not in {"gmbh", "ag", "kg", "co", "mbh", "und"}]
+        return " ".join(tokens)
+
+    def _humanize_lexware_error(self, error_text: str, endpoint: str) -> str:
+        text = str(error_text or "").strip()
+        if "404" in text:
+            return (
+                f"HTTP 404: Endpoint nicht gefunden ({endpoint}). "
+                "Bitte Lexware-Endpunkt in .env prüfen oder lokale Vorlagen verwenden."
+            )
+        return text or "Unbekannter API-Fehler"
+
     def open_offer_editor_dialog(self) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Angebot / Rechnung bearbeiten")
@@ -1624,7 +1639,9 @@ class MainWindow(QMainWindow):
             _populate_lexware_template_combo(loaded_templates)
 
             if error_text:
-                lexware_status_label.setText(f"Lexware: {error_text}")
+                service = getattr(self, "lexware_export_service", None)
+                endpoint = str(getattr(service, "templates_endpoint", "/v1/text-modules") or "/v1/text-modules")
+                lexware_status_label.setText(f"Lexware: {self._humanize_lexware_error(error_text, endpoint)}")
             else:
                 lexware_status_label.setText(
                     f"Lexware: {len(all_templates)} geladen, {len(loaded_templates)} angezeigt"
@@ -1634,21 +1651,43 @@ class MainWindow(QMainWindow):
             customers, customer_error = self._load_lexware_customers()
             lexware_customer_combo.blockSignals(True)
             lexware_customer_combo.clear()
-            lexware_customer_combo.addItem("Aktueller Kunde (aus Auswahl)", "")
+            current_text = current_customer_name or "Unbekannt"
+            if current_customer_number:
+                current_text += f" (Nr. {current_customer_number})"
+            lexware_customer_combo.addItem(f"Aktueller Kunde (aus Termin): {current_text}", "")
+
+            preselect_index = 0
+            lookup_name = self._normalize_customer_lookup_text(current_customer_name)
             for customer in customers:
                 name = str(customer.get("name", "") or "").strip()
                 number = str(customer.get("customer_number", "") or "").strip()
+                city = str(customer.get("city", "") or "").strip()
                 if not name:
                     continue
                 text = f"{name}"
                 if number:
                     text += f" (Nr. {number})"
+                if city:
+                    text += f" - {city}"
                 lexware_customer_combo.addItem(text, customer)
+
+                if current_customer_number and number and current_customer_number == number:
+                    preselect_index = lexware_customer_combo.count() - 1
+                    continue
+
+                if lookup_name:
+                    candidate = self._normalize_customer_lookup_text(name)
+                    if candidate and (lookup_name in candidate or candidate in lookup_name):
+                        preselect_index = lexware_customer_combo.count() - 1
+
+            lexware_customer_combo.setCurrentIndex(preselect_index)
             lexware_customer_combo.blockSignals(False)
 
             _load_lexware_templates_for_selected_customer()
             if customer_error and not loaded_templates:
-                lexware_status_label.setText(f"Lexware: {customer_error}")
+                service = getattr(self, "lexware_export_service", None)
+                endpoint = str(getattr(service, "customers_endpoint", "/v1/contacts") or "/v1/contacts")
+                lexware_status_label.setText(f"Lexware: {self._humanize_lexware_error(customer_error, endpoint)}")
 
         lexware_load_button.clicked.connect(_load_lexware_data)
         lexware_customer_combo.currentIndexChanged.connect(lambda _: _load_lexware_templates_for_selected_customer())

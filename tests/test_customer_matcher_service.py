@@ -45,3 +45,27 @@ def test_match_exact_returns_nicht_zugeordnet_for_empty_input():
     result = service.match_exact("", [{"Firmenname": "X"}])
 
     assert result.state == "nicht_zugeordnet"
+
+
+def test_match_exact_handles_punctuation_variation():
+    service = CustomerMatcherService()
+    contacts = [
+        {"Firmenname": "Elektrotechnik Oelsnitz/E. GmbH", "Kundennummer": "10061"},
+    ]
+
+    result = service.match_exact("Elektrotechnik Oelsnitz./E. GmbH", contacts)
+
+    assert result.state == "eindeutig"
+    assert result.customer_number == "10061"
+
+
+def test_match_exact_handles_legal_form_variation():
+    service = CustomerMatcherService()
+    contacts = [
+        {"Firmenname": "Isoblock Schaltanlagen GmbH & Co. KG", "Kundennummer": "10003"},
+    ]
+
+    result = service.match_exact("Isoblock Schaltanlagen", contacts)
+
+    assert result.state == "eindeutig"
+    assert result.customer_number == "10003"
