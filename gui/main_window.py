@@ -75,6 +75,9 @@ class MainWindow(QMainWindow):
         self.visible_groups: list[dict] = []
         self.last_action: dict | None = None
         self.change_log: list[str] = []
+        
+        self.mandants: list[dict] = self._load_mandants()
+        self.active_mandant_id: str = self.mandants[0]["id"] if self.mandants else ""
 
         self.current_sort_column = 1
         self.current_sort_order = Qt.AscendingOrder
@@ -87,6 +90,16 @@ class MainWindow(QMainWindow):
         self.export_csv_button = QPushButton("CSV exportieren")
         self.export_json_button = QPushButton("JSON exportieren")
         self.lexware_export_button = QPushButton("Lexware Draft exportieren")
+        
+        self.mandant_combo = QComboBox()
+        self.mandant_combo.setMinimumWidth(250)
+        for mandant in self.mandants:
+            self.mandant_combo.addItem(mandant.get("display_name", ""), mandant.get("id", ""))
+        if self.active_mandant_id:
+            index = self.mandant_combo.findData(self.active_mandant_id)
+            if index >= 0:
+                self.mandant_combo.setCurrentIndex(index)
+        self.mandant_combo.currentIndexChanged.connect(self._on_mandant_changed_combo)
 
         self.mark_approved_button = QPushButton("Freigeben")
         self.mark_review_button = QPushButton("Prüfen")
@@ -187,6 +200,8 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.export_csv_button)
         top_bar.addWidget(self.export_json_button)
         top_bar.addWidget(self.lexware_export_button)
+        top_bar.addWidget(QLabel("Mandant:"))
+        top_bar.addWidget(self.mandant_combo)
         top_bar.addStretch()
 
         filter_bar = QHBoxLayout()
@@ -347,6 +362,75 @@ class MainWindow(QMainWindow):
 
     def _selected_groups(self) -> list[dict]:
         return [self.visible_groups[row] for row in self._selected_rows()]
+
+    def _load_mandants(self) -> list[dict]:
+        """Lädt alle Mandanten aus der Konfiguration."""
+        try:
+            config = self.config_loader.load_json("mandants.json")
+            return config.get("mandants", [])
+        except Exception:
+            return []
+
+    def _get_mandant_by_id(self, mandant_id: str) -> dict | None:
+        """Gibt den Mandanten mit der gegebenen ID zurück."""
+        for mandant in self.mandants:
+            if mandant.get("id", "") == mandant_id:
+                return mandant
+        return None
+
+    def _load_contacts_for_mandant(self, mandant_id: str) -> list[dict]:
+        """Lädt Kontakte nur für den angegebenen Mandanten."""
+        if self.contacts_importer is None:
+            return []
+
+        mandant = self._get_mandant_by_id(mandant_id)
+        if not mandant:
+            return []
+
+        contacts_path = mandant.get("contacts_csv", "")
+        if not contacts_path:
+            return []
+
+        try:
+            return self.contacts_importer.load(contacts_path)
+        except Exception:
+            return []
+
+    def _apply_customer_matching_for_mandant(self, mandant_id: str) -> None:
+        """Wendet Customer-Matching auf alle Gruppen für den aktiven Mandanten an."""
+        contacts = self._load_contacts_for_mandant(mandant_id)
+
+        for group in self.groups:
+            group["customer_match_state"] = "nicht_zugeordnet"
+            group["customer_match_name"] = ""
+            group["customer_match_number"] = ""
+
+        if self.invoice_mapper is None:
+            return
+
+        for group in self.groups:
+            proposal = self.invoice_mapper.map_group(group, contacts=contacts)
+            match = proposal.customer_match
+            group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
+            group["customer_match_name"] = str(match.customer_name or "")
+            group["customer_match_number"] = str(match.customer_number or "")
+
+    def _on_mandant_changed_combo(self) -> None:
+        """Handler für Mandantenwechsel im Dropdown."""
+        mandant_id = self.mandant_combo.currentData()
+        if mandant_id and mandant_id != self.active_mandant_id:
+            self._on_mandant_changed(mandant_id)
+
+    def _on_mandant_changed(self, mandant_id: str) -> None:
+        """Wechselt zum neuen Mandanten und führt Re-Matching durch."""
+        if not mandant_id or mandant_id == self.active_mandant_id:
+            return
+
+        self.active_mandant_id = mandant_id
+        self._apply_customer_matching_for_mandant(mandant_id)
+        self._save_manual_data()
+        self._log_action(f"Mandant gewechselt | {self._get_mandant_by_id(mandant_id).get('display_name', mandant_id)}")
+        self.refresh_table()
 
     def open_context_menu(self, position) -> None:
         row = self.table_widget.rowAt(position.y())
@@ -533,7 +617,11 @@ class MainWindow(QMainWindow):
             group.setdefault("customer_match_name", "")
             group.setdefault("customer_match_number", "")
 
-        self._apply_customer_matching()
+        # Setze active_mandant_id auf den Standard-Mandanten (oder bewahre ihn)
+        if not self.active_mandant_id or self.active_mandant_id not in [m.get("id") for m in self.mandants]:
+            self.active_mandant_id = self.mandants[0]["id"] if self.mandants else ""
+
+        self._apply_customer_matching_for_mandant(self.active_mandant_id)
 
         self._apply_saved_manual_data()
 
@@ -590,22 +678,8 @@ class MainWindow(QMainWindow):
         return contacts
 
     def _apply_customer_matching(self) -> None:
-        contacts = self._load_contacts_for_matching()
-
-        for group in self.groups:
-            group["customer_match_state"] = "nicht_zugeordnet"
-            group["customer_match_name"] = ""
-            group["customer_match_number"] = ""
-
-        if self.invoice_mapper is None:
-            return
-
-        for group in self.groups:
-            proposal = self.invoice_mapper.map_group(group, contacts=contacts)
-            match = proposal.customer_match
-            group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
-            group["customer_match_name"] = str(match.customer_name or "")
-            group["customer_match_number"] = str(match.customer_number or "")
+        """Deprecated: Verwende stattdessen _apply_customer_matching_for_mandant."""
+        self._apply_customer_matching_for_mandant(self.active_mandant_id)
 
     def _customer_match_text(self, group: dict) -> str:
         state = str(group.get("customer_match_state", "nicht_zugeordnet")).strip().lower()
@@ -807,6 +881,7 @@ class MainWindow(QMainWindow):
 
         session_data = {
             "source_file": self.current_file_path,
+            "active_mandant_id": self.active_mandant_id,
             "groups": {},
             "change_log": self.change_log,
             "saved_at": datetime.now().isoformat(),
@@ -843,10 +918,22 @@ class MainWindow(QMainWindow):
 
         source_file = session_data.get("source_file", "")
         group_data = session_data.get("groups", {})
+        saved_mandant_id = session_data.get("active_mandant_id", "")
+        
         if not source_file:
             return
 
         self.load_file(source_file, reset_session_state=False)
+
+        # Wechsle zum gespeicherten Mandanten, falls vorhanden
+        if saved_mandant_id and saved_mandant_id != self.active_mandant_id:
+            # Deaktiviere Signal temporär
+            self.mandant_combo.blockSignals(True)
+            index = self.mandant_combo.findData(saved_mandant_id)
+            if index >= 0:
+                self.mandant_combo.setCurrentIndex(index)
+                self._on_mandant_changed(saved_mandant_id)
+            self.mandant_combo.blockSignals(False)
 
         for group in self.groups:
             key = self._build_group_key(group)

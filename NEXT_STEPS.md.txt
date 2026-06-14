@@ -1,7 +1,7 @@
 # NEXT STEPS
 ## Nächste Entwicklungsschritte vom aktuellen Stand zum Rechnungs-MVP
 
-Stand: 2026-06-06
+Stand: 2026-06-14
 
 ---
 
@@ -36,6 +36,22 @@ Jetzt ergänzen:
 - Kunden-/Artikelstamm-Mapping
 - Rechnungspositionen
 - Lexware Draft Export
+
+## Update 2026-06-14
+
+Bereits umgesetzt:
+- Lexware-Export robust gegen fehlendes `expirationDate` bei `quotations`.
+- Domain-Modell für Rechnungsentwürfe aktiv im Code.
+- Kunden-Matching (exakt) implementiert und in GUI-Datenfluss sichtbar gemacht.
+- Mandantenkontext in der GUI umgesetzt.
+- Rechnungspositionen und Validierungsservice eingeführt und im Mapper integriert.
+- Teststand aktuell: 37/37.
+
+Als nächstes umsetzen:
+- GUI-Transparenz für Rechnungsentwürfe erhöhen:
+  - Validierungsstatus sichtbar machen
+  - Positionsvorschau im Detailbereich
+  - Export nur bei fehlerfreier Validierung erlauben
 
 ---
 

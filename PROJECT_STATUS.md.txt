@@ -1,7 +1,7 @@
 # PROJECT STATUS
 ## Rechnungstool – aktueller Ist-Stand
 
-Stand: 2026-06-06
+Stand: 2026-06-14
 
 ---
 
@@ -18,6 +18,38 @@ Aktuell ist das Tool im Kern:
 und soll als nächster großer Schritt erweitert werden zu:
 
 > **einem mandantenfähigen Rechnungsentwurfs-Tool mit Lexware-Draft-Export**
+
+## Update 2026-06-09 (umgesetzt)
+
+- Lexware-Draft-Export für `quotations` setzt jetzt ein gültiges `expirationDate`.
+- Duplikat-Schutz im Exportfluss bleibt aktiv und wurde im GUI-Smoketest bestätigt.
+- Domain-Modelle für Rechnungsentwürfe sind im Code vorhanden (`domain/invoice_models.py`).
+- Kunden-Matching wurde integriert:
+  - `CustomerMatcherService` (Zustände: eindeutig, mehrdeutig, nicht_gefunden, nicht_zugeordnet)
+  - Integration in `InvoiceProposalMapperService`
+  - Anzeige in GUI (Spalte `Kundenmatch`, Detailbereich, CSV/JSON-Export)
+
+## Update 2026-06-14 (umgesetzt)
+
+- Mandantenkontext in der GUI ist umgesetzt:
+  - Mandantenauswahl (Dropdown)
+  - Kontakte mandantenabhängig laden
+  - Matching bei Mandantenwechsel neu berechnen
+  - aktiven Mandanten in Sitzung persistieren
+- Neue Services eingeführt:
+  - `services/invoice_position_service.py`
+  - `services/invoice_validation_service.py`
+- `InvoiceProposalMapperService` integriert jetzt Positionserstellung und Validierung.
+- Bootstrap verdrahtet Position- und Validierungsservice.
+- VS-Code-Tasks für Starten/Testen vorhanden (`.vscode/tasks.json`).
+- Teststand: 37/37 Tests grün.
+
+## Nächster Schritt (gemerkt für nächste Sitzung)
+
+- GUI um Validierungsstatus und Rechnungspositionen erweitern:
+  - sichtbarer Validierungsstatus in Tabelle/Detailbereich
+  - Positionsanzeige im Detailbereich
+  - Export-Blockierung bei Validierungsfehlern
 
 ---
 
@@ -39,7 +71,10 @@ und soll als nächster großer Schritt erweitert werden zu:
 
 ## `services/`
 - `block_classification_service.py`
+- `customer_matcher_service.py`
 - `grouping_service.py`
+- `invoice_proposal_mapper_service.py`
+- `lexware_draft_export_service.py`
 - `proposal_builder_service.py`
 
 ---
@@ -281,10 +316,13 @@ Folgende Kernfunktionen sind im gezeigten Stand noch nicht sichtbar bzw. noch ni
 - Rechnungsname / Belegtitel / Kundenreferenz
 - Zahlungsziel je Vorschlag
 - Exportvalidierung nach Rechnungslogik
-- Lexware-Draft-Export aus der GUI heraus
 - Branding / Logos der Mandanten
 - mehrtägige Einsatzblockbildung statt Datum+Kunde+Projekt-Gruppierung
 - KW-/RE-basierte Sicht-/Vorschlagslogik gemäß MVP
+
+Bereits umgesetzt:
+- Lexware-Draft-Export aus der GUI heraus
+- Duplikat-Schutz gegen erneuten Export bereits exportierter Gruppen
 
 ---
 

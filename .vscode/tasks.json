@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GUI starten (Rechnungsautomatismus)",
+      "type": "shell",
+      "command": "python",
+      "args": ["-m", "app.main"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "CLI Dry Run (ohne GUI)",
+      "type": "shell",
+      "command": "python",
+      "args": ["-m", "app.cli_export_test", "--dry-run", "--limit", "1"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

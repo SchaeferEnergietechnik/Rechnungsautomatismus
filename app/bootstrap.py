@@ -10,6 +10,8 @@ from importer.excel_termin_importer import ExcelTerminImporter
 from services.block_classification_service import BlockClassificationService
 from services.grouping_service import GroupingService
 from services.invoice_proposal_mapper_service import InvoiceProposalMapperService
+from services.invoice_position_service import InvoicePositionService
+from services.invoice_validation_service import InvoiceValidationService
 from services.lexware_draft_export_service import LexwareDraftExportService
 from services.proposal_builder_service import ProposalBuilderService
 
@@ -26,6 +28,8 @@ class AppContext:
     builder: ProposalBuilderService
     grouping: GroupingService
     invoice_mapper: InvoiceProposalMapperService
+    invoice_position_service: InvoicePositionService
+    invoice_validation_service: InvoiceValidationService
     lexware_export: LexwareDraftExportService
 
 
@@ -39,7 +43,12 @@ def bootstrap_application() -> AppContext:
     classifier = BlockClassificationService()
     builder = ProposalBuilderService()
     grouping = GroupingService()
-    invoice_mapper = InvoiceProposalMapperService()
+    position_service = InvoicePositionService()
+    validation_service = InvoiceValidationService()
+    invoice_mapper = InvoiceProposalMapperService(
+        position_service=position_service,
+        validation_service=validation_service,
+    )
     lexware_export = LexwareDraftExportService()
 
     main_window = MainWindow(
@@ -67,5 +76,7 @@ def bootstrap_application() -> AppContext:
         builder=builder,
         grouping=grouping,
         invoice_mapper=invoice_mapper,
+        invoice_position_service=position_service,
+        invoice_validation_service=validation_service,
         lexware_export=lexware_export,
     )

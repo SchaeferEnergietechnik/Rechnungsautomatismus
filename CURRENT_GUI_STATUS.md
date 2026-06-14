@@ -1,7 +1,7 @@
 # CURRENT GUI STATUS
 ## Aktueller Stand der vorhandenen GUI
 
-Stand: 2026-06-06
+Stand: 2026-06-14
 
 ---
 
@@ -41,10 +41,13 @@ Vorhanden:
 Das Hauptfenster wird in `app/bootstrap.py` erzeugt und mit folgenden Komponenten versorgt:
 - `ConfigLoader`
 - `ExcelTerminImporter`
+- `ContactsCsvImporter`
 - `EmployeeBlockExtractor`
 - `BlockClassificationService`
 - `ProposalBuilderService`
 - `GroupingService`
+- `InvoiceProposalMapperService`
+- `LexwareDraftExportService`
 
 ---
 
@@ -61,6 +64,10 @@ Enthält Buttons für:
 - Sitzung speichern
 - CSV exportieren
 - JSON exportieren
+- Lexware Draft exportieren
+
+Enthält zusätzlich:
+- Mandantenauswahl (Dropdown, geladen aus `config/mandants.json`)
 
 ## 4.2 Filterbereich
 Enthält:
@@ -112,6 +119,14 @@ Enthält:
 - Notizfeld
 - Änderungsverlauf
 
+## 4.9 Mandantenverhalten (neu)
+
+Vorhanden:
+- aktiver Mandant wird im GUI-Zustand gehalten
+- Kontakte werden mandantenabhängig geladen
+- Mandantenwechsel löst Kunden-Re-Matching für alle Gruppen aus
+- aktiver Mandant wird in Sitzungsdatei gespeichert/geladen
+
 ---
 
 # 5. Aktuelle Tabellenspalten
@@ -122,14 +137,15 @@ Die Tabelle enthält aktuell diese Spalten:
 2. Datum
 3. KW
 4. Kunde
-5. Projekt
-6. Mitarbeiter
-7. Status
-8. Automatikstatus
-9. RE
-10. Adresse
-11. Geändert
-12. Notiz
+5. Kundenmatch
+6. Projekt
+7. Mitarbeiter
+8. Status
+9. Automatikstatus
+10. RE
+11. Adresse
+12. Geändert
+13. Notiz
 
 ---
 
@@ -415,8 +431,11 @@ Noch nicht sichtbar / nicht umgesetzt im gezeigten Stand:
 - Kundenreferenz / Bestellnummer
 - Zahlungsziel je Vorschlag
 - Exportvalidierung für Rechnungsdaten
-- Lexware Draft Export direkt aus der GUI
 - Final-/PDF-Optionen
+
+Bereits vorhanden:
+- Lexware Draft Export direkt aus der GUI
+- Duplikat-Schutz gegen erneuten Export bereits exportierter Gruppen
 
 ---
 

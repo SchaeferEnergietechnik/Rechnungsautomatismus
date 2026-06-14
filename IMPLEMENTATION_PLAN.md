@@ -1,7 +1,7 @@
 # IMPLEMENTATION PLAN
 ## Konkreter Umsetzungsplan für die nächsten Coding-Schritte
 
-Stand: 2026-06-06
+Stand: 2026-06-14
 
 ---
 
@@ -32,6 +32,30 @@ Noch nicht vorhanden:
 - Rechnungspositionen
 - Rechnungsvalidierung
 - Lexware Draft Export aus GUI
+
+## Fortschritt 2026-06-14
+
+Erledigt:
+- Lexware-Draft-Export im Quotations-Modus korrigiert (`expirationDate`).
+- `CustomerMatcherService` gebaut und in Mapping + GUI integriert.
+- Tests für Matching und Mapper ergänzt.
+- Arbeitsblock D (Mandantenlogik) umgesetzt:
+  - Mandantenauswahl in der GUI
+  - Laden des aktiven Mandanten aus `mandants.json`
+  - Kunden-Matching auf aktiven Mandanten begrenzen
+  - Mandantenwechsel löst Re-Match aus
+  - Persistenz des aktiven Mandanten in Sitzungsdatei
+- Arbeitsblock B erweitert umgesetzt:
+  - `InvoicePositionService` ergänzt
+  - `InvoiceValidationService` ergänzt
+  - `InvoiceProposalMapperService` integriert Positionen + Validierung
+  - Bootstrap verdrahtet neue Services
+
+Nächster Arbeitsblock:
+- GUI-Erweiterung für Rechnungsentwurfstransparenz:
+  - Validierungsstatus in GUI anzeigen
+  - Positionsdarstellung im Detailbereich
+  - Exportaktion bei Validierungsfehlern blockieren
 
 ---
 

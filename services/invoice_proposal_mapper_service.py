@@ -1,10 +1,19 @@
 from domain.invoice_models import InvoiceProposal
 from services.customer_matcher_service import CustomerMatcherService
+from services.invoice_position_service import InvoicePositionService
+from services.invoice_validation_service import InvoiceValidationService
 
 
 class InvoiceProposalMapperService:
-    def __init__(self, customer_matcher: CustomerMatcherService | None = None) -> None:
+    def __init__(
+        self,
+        customer_matcher: CustomerMatcherService | None = None,
+        position_service: InvoicePositionService | None = None,
+        validation_service: InvoiceValidationService | None = None,
+    ) -> None:
         self.customer_matcher = customer_matcher or CustomerMatcherService()
+        self.position_service = position_service or InvoicePositionService()
+        self.validation_service = validation_service or InvoiceValidationService()
 
     def map_group(
         self,
@@ -37,6 +46,12 @@ class InvoiceProposalMapperService:
 
         if contacts is not None:
             proposal.customer_match = self.customer_matcher.match_exact(customer_raw, contacts)
+
+        # Füge Positionen hinzu
+        self.position_service.enrich_proposal_with_positions(proposal, group)
+
+        # Validiere den Proposal
+        self.validation_service.validate_proposal(proposal)
 
         return proposal
 
