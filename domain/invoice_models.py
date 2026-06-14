@@ -22,6 +22,10 @@ class CustomerMatchResult:
     state: str = "nicht_zugeordnet"
     customer_name: str = ""
     customer_number: str = ""
+    address_street: str = ""
+    address_zip: str = ""
+    address_city: str = ""
+    address_country: str = "DE"
 
 
 @dataclass

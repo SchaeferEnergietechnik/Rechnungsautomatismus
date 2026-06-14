@@ -534,7 +534,7 @@ class LexwareDraftExportService:
         payment_term_days: int | None = None,
         payment_term_label: str = "",
     ) -> dict:
-        customer_name = str(group.get("kunde_roh", "")).strip() or "Unbekannter Kunde"
+        customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "")).strip() or "Unbekannter Kunde"
         project_name = str(group.get("projekt_roh", "")).strip() or "Leistung"
         voucher_date = self._as_lexware_datetime(group.get("datum", ""))
         effective_payment_term_days = self.default_payment_term_days if payment_term_days is None else max(int(payment_term_days), 0)
@@ -552,16 +552,20 @@ class LexwareDraftExportService:
             description_parts.append(f"Bemerkung: {remarks}")
 
         line_items = self._build_line_items_from_group(group, project_name, description_parts)
+        customer_street = str(group.get("customer_match_street", "") or "").strip()
+        customer_zip = str(group.get("customer_match_zip", "") or "").strip()
+        customer_city = str(group.get("customer_match_city", "") or "").strip()
+        customer_country = str(group.get("customer_match_country", "") or "DE").strip() or "DE"
 
         payload = {
             "voucherStatus": "draft",
             "voucherDate": voucher_date,
             "address": {
                 "name": customer_name,
-                "street": str(group.get("adresse_roh", "")).strip(),
-                "city": "",
-                "zip": "",
-                "countryCode": "DE",
+                "street": customer_street,
+                "city": customer_city,
+                "zip": customer_zip,
+                "countryCode": customer_country,
             },
             "lineItems": line_items,
             "totalPrice": {

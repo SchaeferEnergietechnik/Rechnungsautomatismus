@@ -69,3 +69,25 @@ def test_match_exact_handles_legal_form_variation():
 
     assert result.state == "eindeutig"
     assert result.customer_number == "10003"
+
+
+def test_match_exact_extracts_customer_address_fields():
+    service = CustomerMatcherService()
+    contacts = [
+        {
+            "Firmenname": "DIGITAL SOLAR SERVICE eGbR",
+            "Kundennummer": "10057",
+            "Straße 1": "Struthweg 28",
+            "PLZ 1": "34260",
+            "Ort 1": "Kaufungen",
+            "Land 1": "DE",
+        },
+    ]
+
+    result = service.match_exact("Digital Solar Service", contacts)
+
+    assert result.state == "eindeutig"
+    assert result.address_street == "Struthweg 28"
+    assert result.address_zip == "34260"
+    assert result.address_city == "Kaufungen"
+    assert result.address_country == "DE"

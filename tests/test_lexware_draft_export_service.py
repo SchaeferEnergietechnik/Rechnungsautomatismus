@@ -184,6 +184,7 @@ def test_payload_includes_travel_text_in_extra_article_description():
     assert "Fahrtkostenangaben" not in payload["lineItems"][0]["description"]
     assert "Fahrtkostenangaben" in payload["lineItems"][1]["description"]
     assert "10 km" in payload["lineItems"][1]["description"]
+    assert "EUR" not in payload["lineItems"][1]["description"]
 
 
 def test_payload_includes_travel_text_in_first_article_description_when_included():
@@ -209,6 +210,7 @@ def test_payload_includes_travel_text_in_first_article_description_when_included
     assert len(payload["lineItems"]) == 1
     assert "Fahrtkostenangaben" in payload["lineItems"][0]["description"]
     assert "2.00 h" in payload["lineItems"][0]["description"]
+    assert "EUR" not in payload["lineItems"][0]["description"]
 
 
 def test_fetch_text_templates_accepts_text_module_shape():
@@ -300,3 +302,22 @@ def test_payload_preserves_article_description_text():
     assert "Originale Artikelbeschreibung" in payload["lineItems"][0]["description"]
     assert "Interne Notiz aus Artikel" in payload["lineItems"][0]["description"]
     assert "Projekt:" not in payload["lineItems"][0]["description"]
+
+
+def test_payload_uses_matched_customer_address_instead_of_project_address():
+    service = LexwareDraftExportService()
+    group = _sample_group()
+    group["adresse_roh"] = "Projektadresse 42, 99999 Baustelle"
+    group["customer_match_name"] = "DIGITAL SOLAR SERVICE eGbR"
+    group["customer_match_street"] = "Struthweg 28"
+    group["customer_match_zip"] = "34260"
+    group["customer_match_city"] = "Kaufungen"
+    group["customer_match_country"] = "DE"
+
+    payload = service._build_payload(group)
+
+    assert payload["address"]["name"] == "DIGITAL SOLAR SERVICE eGbR"
+    assert payload["address"]["street"] == "Struthweg 28"
+    assert payload["address"]["zip"] == "34260"
+    assert payload["address"]["city"] == "Kaufungen"
+    assert payload["address"]["street"] != "Projektadresse 42, 99999 Baustelle"

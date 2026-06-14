@@ -49,10 +49,15 @@ class CustomerMatcherService:
             return CustomerMatchResult(state="mehrdeutig", customer_name=customer_raw.strip())
 
         match = matches[0]
+        street, zip_code, city, country = self._extract_address(match)
         return CustomerMatchResult(
             state="eindeutig",
             customer_name=self._extract_name(match),
             customer_number=self._extract_customer_number(match),
+            address_street=street,
+            address_zip=zip_code,
+            address_city=city,
+            address_country=country,
         )
 
     def _extract_name(self, contact: dict) -> str:
@@ -65,6 +70,31 @@ class CustomerMatcherService:
     def _extract_customer_number(self, contact: dict) -> str:
         for key in ["Kundennummer", "customerNumber", "customer_number", "Debitorennummer"]:
             value = str((contact or {}).get(key, "")).strip()
+            if value:
+                return value
+        return ""
+
+    def _extract_address(self, contact: dict) -> tuple[str, str, str, str]:
+        data = contact or {}
+
+        street = self._first_non_empty(data, [
+            "Straße 1", "Strasse 1", "Stra?e 1", "street", "street1", "addressStreet",
+        ])
+        zip_code = self._first_non_empty(data, [
+            "PLZ 1", "Postleitzahl", "zip", "zipCode", "postalCode", "addressZip",
+        ])
+        city = self._first_non_empty(data, [
+            "Ort 1", "Stadt", "city", "addressCity",
+        ])
+        country = self._first_non_empty(data, [
+            "Land 1", "Land", "country", "countryCode", "addressCountry",
+        ]) or "DE"
+
+        return street, zip_code, city, country
+
+    def _first_non_empty(self, data: dict, keys: list[str]) -> str:
+        for key in keys:
+            value = str(data.get(key, "") or "").strip()
             if value:
                 return value
         return ""

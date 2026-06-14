@@ -853,6 +853,9 @@ class MainWindow(QMainWindow):
             return False
 
         distance_km, duration_hours = metrics
+        distance_km = self._round_up_km_to_tens(distance_km * 2.0)
+        duration_hours = self._round_up_to_quarter_hour(duration_hours * 2.0)
+
         if duration_hours <= 0:
             duration_hours = self._estimate_travel_hours_from_km(distance_km)
 
@@ -868,7 +871,7 @@ class MainWindow(QMainWindow):
                 "Route berechnet.\n"
                 f"Start: {origin}\n"
                 f"Ziel: {destination}\n"
-                f"Strecke: {int(round(distance_km))} km\n"
+                f"Strecke (Hin- und Rückfahrt): {int(round(distance_km))} km\n"
                 f"Fahrzeit: {duration_hours:.2f} h",
             )
         return True
@@ -1253,6 +1256,10 @@ class MainWindow(QMainWindow):
             group["customer_match_state"] = "nicht_zugeordnet"
             group["customer_match_name"] = ""
             group["customer_match_number"] = ""
+            group["customer_match_street"] = ""
+            group["customer_match_zip"] = ""
+            group["customer_match_city"] = ""
+            group["customer_match_country"] = "DE"
 
         if self.invoice_mapper is None:
             return
@@ -1263,6 +1270,14 @@ class MainWindow(QMainWindow):
             group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
             group["customer_match_name"] = str(match.customer_name or "")
             group["customer_match_number"] = str(match.customer_number or "")
+            street = getattr(match, "address_street", "")
+            zip_code = getattr(match, "address_zip", "")
+            city = getattr(match, "address_city", "")
+            country = getattr(match, "address_country", "DE")
+            group["customer_match_street"] = street.strip() if isinstance(street, str) else ""
+            group["customer_match_zip"] = zip_code.strip() if isinstance(zip_code, str) else ""
+            group["customer_match_city"] = city.strip() if isinstance(city, str) else ""
+            group["customer_match_country"] = country.strip() if isinstance(country, str) and country.strip() else "DE"
 
     def _on_mandant_changed_combo(self) -> None:
         """Handler für Mandantenwechsel im Dropdown."""
@@ -2159,6 +2174,10 @@ class MainWindow(QMainWindow):
             group.setdefault("customer_match_state", "nicht_zugeordnet")
             group.setdefault("customer_match_name", "")
             group.setdefault("customer_match_number", "")
+            group.setdefault("customer_match_street", "")
+            group.setdefault("customer_match_zip", "")
+            group.setdefault("customer_match_city", "")
+            group.setdefault("customer_match_country", "DE")
             self._ensure_travel_fields_for_group(group)
 
         # Setze active_mandant_id auf den Standard-Mandanten (oder bewahre ihn)
