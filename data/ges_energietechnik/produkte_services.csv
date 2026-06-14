@@ -1,0 +1,248 @@
+?"Artikelnummer";"GTIN/EAN";"Bezeichnung";"Beschreibung";"Notiz";"Einheit";"Steuerart";"VK (Netto)"
+"7000411";"";"Bittest";"Durchführung Bittest mit dem Netzbetreiber
+
+- Vorbereitung der Fernwirkanlage
+- IBN der Fernwirkanlage
+- Durchführung des Bittest in Anwesenheit des Netzbetreibers
+
+inklusive An- und Abfahrtskosten";"";"Stunde";"USt19";"2000,00"
+"4000725";"";"Bürdemessung";"Bürdemessung aller verdrahteten Stromwandlerkerne und Spannungswandlerwicklungen
+
+- ausgehend vom Klemmbrett der MS-Wandler
+- lösen der Anschlüsse und Durchführung der Bürdemessung
+- Erstellen eines Protkolls";"";"Stück";"USt19";"420,00"
+"9000200";"";"Bürdemessung";"'- Bürdemessung aller Strom- und Spannungswandlerkreise, im Falle angeschlossener Messgeräte
+
+Anmerkung: In der Regel wird der Zähler vom Netzbetreiber erst später eingebaut. In diesem Fall ist es technisch nicht sinnvoll die Bürde zu messen. Eine Verdrahtungsprüfung wird in jedem Fall durchgeführt.";"";"Stück";"USt19";"0,00"
+"900500";"";"Bürdemessung Zähler";"Messung der Bürde aller Strom- und Spannungswandler in Bezug auf den Zähler.
+Vorführung der einzelnen Phasen eines jedes Wandlers, kontrolle auf Phase und Verdrahtung zum Zähler.
+Anpassung des Schutzprüfprotolls mit den Bürdewerten.";"";"Stück";"USt19";"420,00"
+"700005001";"";"Einbau Gateway";"'- Einbau eines Netzbetreiber-Gateway in einer begehbaren Station (Halterungssystem in Station vorhanden)
+- sekundärseitige Einbindung des Gateways in die Station (Anschluss Hilfspannung Kommunikation, ggfs. Not AUS)
+- Einbau Antenne (Antennendurchlässe durch Baukörper sind bauseits vorhanden)";"";"Stück";"USt19";"475,00"
+"70003";"";"FW-5 Modul Ausgänge 8DO";"";"";"Stück";"USt19";"225,00"
+"70002";"";"FW-5 Modul Eingänge 8DI";"";"";"Stück";"USt19";"195,00"
+"300050";"";"Fahrtkosten";"An- und Abfahrtskosten zum Standort
+
+Dieser Posten enthält die An- und Abfahrtszeit, sowie eine km-Pauschale";"";"Stück";"USt19";"0,00"
+"";"";"MS-Wandler-Primärprüfung";"Vereinfachte MS-Primär-Wandlerprüfung aller Kerne und Wicklungen, soweit eine Verdrahtung vorhanden ist, in einem MS-Messfeld, für Zähler, Messgeräte und ggfs. Schutz:
+
+- Primäreinspeisung der Wandler,
+- Verdrahtungsprüfung,
+- Wandler- und Phasenzuordnungsprüfung,
+- Übersetzungsverhältnis,
+- Leistungsrichtungsüberprüfung (Polung der Stromwandler),
+- ohne Bürdemessung
+
+Inklusive Erstellung eines Wandlerprüfprotokolls";"";"Stück";"USt19";"300,00"
+"1";"";"Mehrtagespauschale";"'- hier sind alle Kosten und Nebenkosten für eine Übernachtung der Mitarbeiter vor Ort enthalten
+-diese Pauschale wird pro Übernachtung abgerechnet";"fester Wert! -> es sei denn das Hotel konnte nur sehr teuer gebucht werden.";"Stück";"USt19";"130,00"
+"4000800";"";"Prüfung UMZ-Schutzrelais";"'- Parametrierung/Kontrolle eines UMZ-Schutzrelais 
+- Schutzprüfung eines UMZ-Schutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact (falls vorhanden)
+
+Inklusive vereinfachter Strom-Wandlerprüfung 
+- Primäreinspeisung der Wandler,
+- Verdrahtungsprüfung,
+- Wandler- und Phasenzuordnungsprüfung,
+- Übersetzungsverhältnis,
+- ohne Bürdemessung
+
+Inklusive Erstellung eines Prüfprotokoll";"";"Stück";"USt19";"750,00"
+"7000401";"";"Prüfung untergeordneter Schutz";"Erstinbetriebnahme Schutz:
+
+- Parametrierung eines untergeordneten Entkupplungsschutzrelais (z.B. Ziehl, ABB, SEG, Hager)
+- Prüfung eines untergeordneten Entkupplungsschutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Vermessung der Wiederzuschaltbedingungen im Schutzrelais (so die Anlage dafür ausgerüstet ist)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+- Aufnahme der Firmware
+
+Inklusive Erstellung eines Prüfprotokolls";"";"Stück";"USt19";"350,00"
+"";"";"Prüfung übergeordneter Schutz";"Erstinbetriebnahme Schutz:
+
+- Parametrierung eines übergeordneten Entkupplungsschutzrelais 
+- Schutzprüfung eines übergeordneten Entkupplungs- und/oder UMZSchutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact und Spannungswandlerschutzschalter 
+
+Vereinfachte MS-Primär-Wandlerprüfung aller Kerne und Wicklungen, soweit eine Verdrahtung vorhanden ist, in einem MS-Messfeld, für Zähler, Messgeräte und ggfs. Schutz:
+
+- Primäreinspeisung der Wandler,
+- Verdrahtungsprüfung,
+- Wandler- und Phasenzuordnungsprüfung,
+- Übersetzungsverhältnis,
+- Leistungsrichtungsüberprüfung (Polung der Stromwandler),
+- ohne Bürdemessung
+
+Inklusive Erstellung eines Prüfprotokolls
+Inklusive Erstellung eines Wandlerprüfprotokolls";"";"Stück";"USt19";"1220,00"
+"7000500";"";"Prüfung übergeordneter Schutz o. USt";"'- Parametrierung eines übergeordneten Entkupplungsschutzrelais 
+- Schutzprüfung eines übergeordneten Entkupplungs- und/oder UMZSchutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact und Spannungswandlerschutzschalter 
+
+Inklusive vereinfachter MS-Wandlerprüfung aller Kerne und Wicklungen, soweit eine Verdrahtung vorhanden ist:
+- Primäreinspeisung der Wandler,
+- Verdrahtungsprüfung,
+- Wandler- und Phasenzuordnungsprüfung,
+- Übersetzungsverhältnis,
+- Leistungsrichtungsüberprüfung (Polung der Stromwandler),
+- ohne Bürdemessung
+
+Inklusive Erstellung eines Prüfprotokolls
+Inklusive An-und Abreisekosten zum Standort der Station";"";"Stück";"None";"2200,00"
+"900501";"";"Schutzvorführung";"Vorführung gegenüber dem Netzbetreiber die Funktionalität aller Schutzfunktionen des übergeordneten Schutzes und die jeweilige Auslösung des zugehörigen Leistungsschalters.
+Das Schutzrelais wird mithilfe der Mess- und Prüftechnik in den Fehlerzustand gebracht und die Auslösung des LS kontrolliert.
+Der Netzbetreiber protokolliert die Funktionen.";"";"Stück";"USt19";"350,00"
+"7000415";"";"Vor-Bittest innerhalb der Station";"Durchführung Vor-Bittest innerhalb der Station
+
+- Vorbereitung der Fernwirkanlage
+- IBN der Fernwirkanlage
+- Vortest aller Datenpunkte des Netzbetreibers
+- Ausfüllen netzbetreiberspezifischer Anmeldeformulare";"";"Stunde";"USt19";"450,00"
+"7000520";"";"Wandlerprüfung";"Vereinfachte MS-Wandlerprüfung aller Kerne und Wicklungen, soweit eine Verdrahtung vorhanden ist:
+
+- Primäreinspeisung der Wandler,
+- Verdrahtungsprüfung,
+- Wandler- und Phasenzuordnungsprüfung,
+- Übersetzungsverhältnis,
+- Leistungsrichtungsüberprüfung (Polung der Stromwandler),
+- ohne Bürdemessung
+
+Inklusive Erstellung eines Wandlerprüfprotokolls";"";"Stück";"USt19";"410,00"
+"";"";"Wartung - Erweiterte Trafoprüfungen";"1. Ölprobe (DGA, Wassergehalt, Durchschlag) nach IEC 60567 / IEC 60156 Inklusive Protokoll aus einem anerkannten Analyselabor
+
+2. Wicklungswiderstände nach IEC 60076
+3. Übersetzungsverhältnis nach IEC 60076
+4. Isolationswiderstände nach IEC 60076
+5. Erregerstrommessung nach IEC 60076
+6. Kurzschlussimpedanmessung nach IEC 60076
+ -> Inklusive Prüfprotokoll der gemessenen Werte
+
+-> Punkt 1: 1150,00 Euro 
+-> Punkt 2-6: 520,00 Euro
+
+abgerechnet pro Transformator";"";"Stück";"USt19";"1670,00"
+"";"";"Wartung - Trafostation mit Transformator und NSHV";"1. Wartung der Mittelspannungsanlage
+
+Sicht- und Funktionsprüfung sämtlicher Schaltfelder 
+Mechanische Inspektion und Funktionskontrolle der Schaltgeräte
+Reinigung der Anlagenteile
+Kontrolle der Erdungs- und Kurzschlusseinrichtungen
+Kontrolle und Messung der Spannungs- und Kurzschlussanzeiger
+Dokumentation sämtlicher Mess- und Prüfergebnisse
+
+2. Wartung des Transformators
+
+Sichtprüfung auf mechanische Beschädigungen und Undichtigkeiten
+Kontrolle von Ölstand und Temperaturüberwachung (soweit möglich)
+Prüfung des Trafoschutz
+Reinigung und Funktionskontrolle der Lüfter- und Kühlanlagen (nicht im Angebot enthalten ist die Reinigung von Trockentransformatoren)
+
+3. Wartung der Niederspannungsanlage
+
+Sichtprüfung und Reinigung der NSHV
+Anzugsdrehmomentkontrolle relevanter Verbindungen 
+Funktionsprüfung von Schaltgeräten, Sicherungen und Leistungsschaltern
+Überprüfung der Sammelschienen und Klemmverbindungen
+Kontrolle der Erdung und Potentialausgleichsleitungen (Erdungsmessung)
+Ggfs. Isolationsmessung
+
+4. DGUV V3 Prüfung (gemäß DIN VDE 0105-100 / 0100-600)
+
+Wiederholungsprüfung aller relevanten Anlagenteile
+Messung von Schutzleitern, Isolationswiderständen und Schleifenimpedanzen
+Prüfung der Wirksamkeit von Schutzmaßnahmen gegen elektrischen Schlag
+
+5. Zubehör
+
+Relevantes Zubehör auf Vorhandensein prüfen / Dokumentation
+
+6. Baukörper
+
+Erfassung des Zustandes
+
+
+Erstellung des Prüfprotokolls
+
+Inkludiert sind die Absprachen mit dem Netzbetreiber zur Abschaltung der Ringfelder
+Die Ringfelder können nur abgeschaltet werden, wenn der Netzbetreiber zu erreichen ist.
+Nicht inkludiert sind eventuelle Kosten des Netzbetreibers für die Abschaltung der Ringfelder
+
+Ohne Schutzprüfungen.";"";"Stück";"USt19";"1225,00"
+"80001002";"";"Wartung - Übergabestation, ohne Transformator, ohne NSHV";"1. Wartung der Mittelspannungsanlage
+
+Sicht- und Funktionsprüfung sämtlicher Schaltfelder 
+Mechanische Inspektion und Funktionskontrolle der Schaltgeräte
+Reinigung der Anlagenteile
+Kontrolle der Erdungs- und Kurzschlusseinrichtungen
+Kontrolle und Messung der Spannungs- und Kurzschlussanzeiger
+Dokumentation sämtlicher Mess- und Prüfergebnisse
+
+
+4. DGUV V3 Prüfung (gemäß DIN VDE 0105-100 / 0100-600)
+
+Wiederholungsprüfung aller relevanten Anlagenteile
+Messung von Schutzleitern, Isolationswiderständen und Schleifenimpedanzen
+Prüfung der Wirksamkeit von Schutzmaßnahmen gegen elektrischen Schlag
+
+5. Zubehör
+
+Relevantes Zubehör auf Vorhandensein prüfen / Dokumentation
+
+6. Baukörper
+
+Erfassung des Zustandes
+Erdungsmessung
+
+
+Erstellung des Prüfprotokolls
+
+Inkludiert sind die Absprachen mit dem Netzbetreiber zur Abschaltung der Ringfelder
+Die Ringfelder können nur abgeschaltet werden, wenn der Netzbetreiber zu erreichen ist.
+Nicht inkludiert sind eventuelle Kosten des Netzbetreibers für die Abschaltung der Ringfelder";"";"Stück";"USt19";"975,00"
+"7000402";"";"Wiederholungsprüfung untergeordneter Schutz";"Wiederholungsprüfung
+ 
+- Prüfung eines untergeordneten Entkupplungsschutzrelais (z.B. Ziehl, ABB, SEG, Hager)
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Vermessung der Wiederzuschaltbedingungen im Schutzrelais (so die Anlage dafür ausgerüstet ist)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+- Aufnahme der Firmware
+
+Inklusive Erstellung eines Prüfprotokolls";"";"Stück";"USt19";"380,00"
+"7000404";"";"Wiederholungsprüfung übergeordneter Schutz";"Wiederholungsprüfung
+
+- Schutzprüfung eines übergeordneten Entkupplungs- und/oder UMZSchutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact, Hilfsspannungsversorgung und Spannungswandlerschutzschalter (falls verdrahtet) 
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+
+Inklusive Erstellung eines Prüfprotokolls für den übergeordneten Schutz";"";"Stück";"USt19";"875,00"
+"70001";"";"net-line FW-5-GATE series5e";"FW-5-GATE series 5e Baugruppe, inklusive Grundsoftware";"";"Stück";"USt19";"960,00"
+"7000400";"";"xx_securenergy Prüfung Schutz der Trafostation";"Wiederholungsprüfung übergeordneter Schutz
+
+- Überprüfung/Anpassung eines übergeordneten Entkupplungsschutzrelais 
+- Schutzprüfung eines übergeordneten Entkupplungs- und/oder UMZSchutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact, Hilfsspannungsversorgung und Spannungswandlerschutzschalter 
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+
+ohne vereinfachter MS-Wandlerprüfung 
+Inklusive Erstellung eines Prüfprotokolls für den übergeordneten Schutz
+
+Prüfung untergeordneter Schutz:
+- Prüfung/Anpassung eines untergeordneten Entkupplungsschutzrelais (z.B. Ziehl, ABB, SEG, Hager)
+- Prüfung eines untergeordneten Entkupplungsschutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Vermessung der Wiederzuschaltbedingungen im Schutzrelais (so die Anlage dafür ausgerüstet ist)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+- Aufnahme der Firmware
+
+Inklusive Erstellung eines Prüfprotokolls für den übergeordneten Schutz
+
+Inklusive An- und Abfahrtskosten";"";"Stück";"USt19";"1791,88"

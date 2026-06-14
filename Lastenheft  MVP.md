@@ -427,6 +427,28 @@ Mögliche Varianten:
 Nicht zulässig:
 - beides gleichzeitig doppelt
 
+MVP-Umsetzung (verbindlich):
+- Startadresse = Mandantenadresse (`strasse`, `plz`, `ort`)
+- Zieladresse = Adressspalte aus Termin-Excel (`adresse_roh`)
+- KM werden automatisch als echte Auto-Fahrstrecke berechnet (geokodiert + Routing)
+- Werte bleiben je Rechnung manuell editierbar
+
+Fahrtkostensätze (Default, editierbar pro Rechnung):
+- Fahrtstunden-Satz: **150 EUR / Stunde**
+- Kilometer-Satz: **0,70 EUR / km**
+
+Abrechnungsmodus je Rechnung (auswählbar):
+- `extra_article` = Fahrtkosten als separate Position
+- `included_in_first_article` = Fahrtkosten im ersten Leistungsartikel enthalten
+
+Kundenspezifischer Default:
+- Standardmäßig `extra_article`
+- Für Kundenname enthält "Faber Etec": `included_in_first_article`
+
+Vorschau:
+- Berechnete Stunden, KM, Sätze und Gesamtbetrag sind vor Export sichtbar
+- Manuelle Anpassungen sind vor Export möglich
+
 ---
 
 # 25. Mehrtagespauschale

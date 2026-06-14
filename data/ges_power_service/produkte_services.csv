@@ -1,0 +1,153 @@
+?"Artikelnummer";"GTIN/EAN";"Bezeichnung";"Beschreibung";"Notiz";"Einheit";"Steuerart";"VK (Netto)"
+"";"";"Fahrtkosten";"An- und Abfahrtskosten zum Standort
+
+Dieser Posten enthält die An- und Abfahrtszeit, sowie eine km-Pauschale";"150?/h und 0,7?/km";"Stück";"USt19";"0,00"
+"";"";"Mehrtagespauschale";"'- hier sind alle Kosten und Nebenkosten für eine Übernachtung der Mitarbeiter vor Ort enthalten
+-diese Pauschale wird pro Übernachtung abgerechnet";"";"Stück";"USt19";"130,00"
+"";"";"Wartung - Erweiterte Trafoprüfungen";"1. Ölprobe (DGA, Wassergehalt, Durchschlag) nach IEC 60567 / IEC 60156 Inklusive Protokoll aus einem anerkannten Analyselabor
+
+2. Wicklungswiderstände nach IEC 60076
+3. Übersetzungsverhältnis nach IEC 60076
+4. Isolationswiderstände nach IEC 60076
+5. Erregerstrommessung nach IEC 60076
+6. Kurzschlussimpedanmessung nach IEC 60076
+ -> Inklusive Prüfprotokoll der gemessenen Werte
+
+-> Punkt 1: 1150,00 Euro 
+-> Punkt 2-6: 520,00 Euro
+
+abgerechnet pro Transformator
+
+Anmerkung: 
+Punkt1: Ölproben können nur gezogen werden, wenn man an die Ölablausschraube ran kommt (Platz vor Ort)
+Punkte 2-6: Um diese Messungen machen zu können, muss entweder das Messfeld geöffnet werden (Plombierung?) oder die Endverschlüsse am Trafo abgenommen werden. Letzteres erfolgt ohne Gewähr, aufgrund von Alter oder Montage könnte es zu Problemen kommen. Dadurch bedingte Ausfälle können nicht von uns übernommen werden.";"";"Stück";"USt19";"1670,00"
+"";"";"Wartung - NSHV";"1. Wartung der Niederspannungsanlage
+
+Sichtprüfung und Reinigung der NSHV
+Anzugsdrehmomentkontrolle relevanter Verbindungen 
+Funktionsprüfung von Schaltgeräten, Sicherungen und Leistungsschaltern
+Überprüfung der Sammelschienen und Klemmverbindungen
+Kontrolle der Erdung und Potentialausgleichsleitungen (Erdungsmessung)
+Ggfs. Isolationsmessung
+
+2. DGUV V3 Prüfung (gemäß DIN VDE 0105-100 / 0100-600)
+
+Wiederholungsprüfung aller relevanten Anlagenteile
+Messung von Schutzleitern, Isolationswiderständen und Schleifenimpedanzen
+Prüfung der Wirksamkeit von Schutzmaßnahmen gegen elektrischen Schlag
+
+3. Baukörper
+
+Erfassung des Zustandes
+
+
+Erstellung des Prüfprotokolls
+
+Inkludiert sind die Absprachen mit dem Netzbetreiber zur Abschaltung der Ringfelder
+Die Ringfelder können nur abgeschaltet werden, wenn der Netzbetreiber zu erreichen ist.
+Nicht inkludiert sind eventuelle Kosten des Netzbetreibers für die Abschaltung der Ringfelder
+
+Ohne Schutzprüfungen.";"Netzweltfabrik mit Fahrkosten";"Stück";"USt19";"523,26"
+"";"";"Wartung - Trafostation mit Transformator und NSHV";"1. Wartung der Mittelspannungsanlage
+
+Sicht- und Funktionsprüfung sämtlicher Schaltfelder 
+Mechanische Inspektion und Funktionskontrolle der Schaltgeräte
+Reinigung der Anlagenteile
+Kontrolle der Erdungs- und Kurzschlusseinrichtungen
+Kontrolle und Messung der Spannungs- und Kurzschlussanzeiger
+Dokumentation sämtlicher Mess- und Prüfergebnisse
+
+2. Wartung des Transformators
+
+Sichtprüfung auf mechanische Beschädigungen und Undichtigkeiten
+Kontrolle von Ölstand und Temperaturüberwachung (soweit möglich)
+Prüfung des Trafoschutz
+Reinigung und Funktionskontrolle der Lüfter- und Kühlanlagen (nicht im Angebot enthalten ist die Reinigung von Trockentransformatoren)
+
+3. Wartung der Niederspannungsanlage
+
+Sichtprüfung und Reinigung der NSHV
+Anzugsdrehmomentkontrolle relevanter Verbindungen 
+Funktionsprüfung von Schaltgeräten, Sicherungen und Leistungsschaltern
+Überprüfung der Sammelschienen und Klemmverbindungen
+Kontrolle der Erdung und Potentialausgleichsleitungen (Erdungsmessung)
+Ggfs. Isolationsmessung
+
+4. DGUV V3 Prüfung (gemäß DIN VDE 0105-100 / 0100-600)
+
+Wiederholungsprüfung aller relevanten Anlagenteile
+Messung von Schutzleitern, Isolationswiderständen und Schleifenimpedanzen
+Prüfung der Wirksamkeit von Schutzmaßnahmen gegen elektrischen Schlag
+
+5. Zubehör
+
+Relevantes Zubehör auf Vorhandensein prüfen / Dokumentation
+
+6. Baukörper
+
+Erfassung des Zustandes
+
+
+Erstellung des Prüfprotokolls
+
+Inkludiert sind die Absprachen mit dem Netzbetreiber zur Abschaltung der Ringfelder
+Die Ringfelder können nur abgeschaltet werden, wenn der Netzbetreiber zu erreichen ist.
+Nicht inkludiert sind eventuelle Kosten des Netzbetreibers für die Abschaltung der Ringfelder
+
+Ohne Schutzprüfungen.";"";"Stück";"USt19";"1225,00"
+"";"";"Wartung - Übergabestation, ohne Transformator, ohne NSHV";"1. Wartung der Mittelspannungsanlage
+
+Sicht- und Funktionsprüfung sämtlicher Schaltfelder 
+Mechanische Inspektion und Funktionskontrolle der Schaltgeräte
+Reinigung der Anlagenteile
+Kontrolle der Erdungs- und Kurzschlusseinrichtungen
+Kontrolle und Messung der Spannungs- und Kurzschlussanzeiger
+Dokumentation sämtlicher Mess- und Prüfergebnisse
+
+
+4. DGUV V3 Prüfung (gemäß DIN VDE 0105-100 / 0100-600)
+
+Wiederholungsprüfung aller relevanten Anlagenteile
+Messung von Schutzleitern, Isolationswiderständen und Schleifenimpedanzen
+Prüfung der Wirksamkeit von Schutzmaßnahmen gegen elektrischen Schlag
+
+5. Zubehör
+
+Relevantes Zubehör auf Vorhandensein prüfen / Dokumentation
+
+6. Baukörper
+
+Erfassung des Zustandes
+Erdungsmessung
+
+Erstellung des Prüfprotokolls
+
+Inkludiert sind die Absprachen mit dem Netzbetreiber zur Abschaltung der Ringfelder
+Die Ringfelder können nur abgeschaltet werden, wenn der Netzbetreiber zu erreichen ist.
+Nicht inkludiert sind eventuelle Kosten des Netzbetreibers für die Abschaltung der Ringfelder";"";"Stück";"USt19";"975,00"
+"";"";"Wiederholungsprüfung untergeordneter Schutz";"'- Prüfung eines untergeordneten Entkupplungsschutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Vermessung der Wiederzuschaltbedingungen im Schutzrelais (so die Anlage dafür ausgerüstet ist)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+- Aufnahme der Firmware
+
+Inklusive Erstellung eines Prüfprotokolls";"Netzweltfabrik mit Fahrkosten";"Stück";"USt19";"613,26"
+"";"";"Wiederholungsprüfung untergeordneter Schutz";"'- Prüfung eines untergeordneten Entkupplungsschutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Vermessung der Wiederzuschaltbedingungen im Schutzrelais (so die Anlage dafür ausgerüstet ist)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte
+- Bestimmung der Leistungsschaltereigenzeit, falls verdrahtet
+- Aufnahme der Firmware
+
+Inklusive Erstellung eines Prüfprotokolls";"";"Stück";"USt19";"410,00"
+"";"";"Wiederholungsprüfung übergeordneter Schutz";"'- Schutzprüfung eines übergeordneten Entkupplungs- und/oder UMZSchutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact und Spannungswandlerschutzschalter 
+
+Inklusive Erstellung eines Prüfprotokolls";"";"Stück";"USt19";"875,00"
+"";"";"Wiederholungsprüfung übergeordneter Schutz";"'- Schutzprüfung eines übergeordneten Entkupplungs- und/oder UMZSchutzrelais
+- Bestimmung der Auslöse- und Rückfallwerte (so diese messbar sind)
+- Auslösekontrolle des zugehörigen Leistungsschalter bei Überschreiten der Auslösewerte, Live-Contact und Spannungswandlerschutzschalter 
+
+Inklusive Erstellung eines Prüfprotokolls";"Netzweltfabrik mit Fahrkosten";"Stück";"USt19";"1078,26"

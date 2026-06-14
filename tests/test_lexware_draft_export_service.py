@@ -28,6 +28,27 @@ def test_payload_contains_required_payment_fields(monkeypatch):
     assert payload["paymentConditions"]["paymentTermLabel"] == "21 Tage netto"
 
 
+def test_payload_uses_overrides(monkeypatch):
+    monkeypatch.setenv("LEXWARE_DRAFT_ENDPOINT", "/v1/quotations")
+    service = LexwareDraftExportService()
+
+    payload = service._build_payload(
+        _sample_group(),
+        title="Sonderangebot",
+        introduction="Individuelle Einleitung",
+        remark="Individuelle Nachbemerkung",
+        payment_term_days=30,
+        payment_term_label="30 Tage netto",
+    )
+
+    assert payload["title"] == "Sonderangebot"
+    assert payload["introduction"] == "Individuelle Einleitung"
+    assert payload["remark"] == "Individuelle Nachbemerkung"
+    assert payload["paymentConditions"]["paymentTermDuration"] == 30
+    assert payload["paymentConditions"]["paymentTermLabel"] == "30 Tage netto"
+    assert "expirationDate" in payload
+
+
 def test_payload_line_items_shape(monkeypatch):
     monkeypatch.delenv("LEXWARE_DRAFT_ENDPOINT", raising=False)
     service = LexwareDraftExportService()

@@ -9,7 +9,11 @@
       "ort": "Altmärkische Wische",
       "contacts_csv": "data/ges_energietechnik/contacts.csv",
       "products_csv": "data/ges_energietechnik/produkte_services.csv",
+      "lexware_company_id": "",
       "default_payment_terms": "14 Tage netto",
+      "default_draft_title": "Angebot",
+      "default_draft_introduction": "Automatisch erzeugter Entwurf für das Angebot der G.E.S. Energietechnik GmbH.",
+      "default_draft_remark": "Erzeugt durch Rechnungsautomatismus",
       "logo_path": "assets/logos/ges_energietechnik.png"
     },
     {
@@ -21,7 +25,11 @@
       "ort": "Altmärkische Wische",
       "contacts_csv": "data/ges_power_service/contacts.csv",
       "products_csv": "data/ges_power_service/produkte_services.csv",
+      "lexware_company_id": "",
       "default_payment_terms": "14 Tage netto",
+      "default_draft_title": "Angebot",
+      "default_draft_introduction": "Automatisch erzeugter Entwurf für das Angebot der G.E.S. Power Service GmbH.",
+      "default_draft_remark": "Erzeugt durch Rechnungsautomatismus",
       "logo_path": "assets/logos/ges_power_service.png"
     }
   ]

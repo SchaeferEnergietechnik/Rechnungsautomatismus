@@ -45,13 +45,17 @@ Bereits umgesetzt:
 - Kunden-Matching (exakt) implementiert und in GUI-Datenfluss sichtbar gemacht.
 - Mandantenkontext in der GUI umgesetzt.
 - Rechnungspositionen und Validierungsservice eingeführt und im Mapper integriert.
+- Fahrtkostenlogik im MVP ergänzt:
+  - KM-Berechnung aus Mandantenadresse -> Einsatzadresse
+  - editierbare Fahrtstunden/KM/Sätze pro Rechnung
+  - Modus je Rechnung (`extra_article` / `included_in_first_article`)
 - Teststand aktuell: 37/37.
 
 Als nächstes umsetzen:
-- GUI-Transparenz für Rechnungsentwürfe erhöhen:
-  - Validierungsstatus sichtbar machen
-  - Positionsvorschau im Detailbereich
-  - Export nur bei fehlerfreier Validierung erlauben
+- Validierungs- und Exporttransparenz weiter erhöhen:
+  - klarer Exporthinweis bei fehlender Geokodierung
+  - optionale Distanzquelle (Routing statt Luftlinie)
+  - Fahrkostenregeln optional kundenstammbasiert zentralisieren
 
 ---
 

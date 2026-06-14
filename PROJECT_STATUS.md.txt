@@ -44,6 +44,21 @@ und soll als nächster großer Schritt erweitert werden zu:
 - VS-Code-Tasks für Starten/Testen vorhanden (`.vscode/tasks.json`).
 - Teststand: 37/37 Tests grün.
 
+## Update 2026-06-14 (Fahrtkosten)
+
+- Fahrtkostenlogik im MVP ergänzt:
+  - automatische KM-Berechnung aus Mandantenadresse -> Einsatzadresse
+  - editierbare Fahrtstunden, KM, Stundensatz und KM-Satz pro Rechnung
+  - Modus je Rechnung:
+    - `extra_article` (separate Fahrtkostenposition)
+    - `included_in_first_article` (Fahrtkosten im ersten Artikel enthalten)
+- Defaults:
+  - 150 EUR/Stunde
+  - 0,70 EUR/km
+- Kundenspezifischer Modus-Default:
+  - Standard `extra_article`
+  - bei Kundenname enthält "Faber Etec" -> `included_in_first_article`
+
 ## Nächster Schritt (gemerkt für nächste Sitzung)
 
 - GUI um Validierungsstatus und Rechnungspositionen erweitern:

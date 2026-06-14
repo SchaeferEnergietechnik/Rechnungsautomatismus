@@ -1,7 +1,9 @@
 ﻿import csv
 import json
+import re
 from datetime import datetime
 from pathlib import Path
+from urllib import parse, request, error
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QKeySequence, QShortcut, QAction
@@ -16,11 +18,15 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QPlainTextEdit,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QDoubleSpinBox,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
     QHeaderView,
@@ -53,6 +59,7 @@ class MainWindow(QMainWindow):
         classifier,
         builder,
         grouping,
+        articles_importer=None,
         invoice_mapper=None,
         lexware_export_service=None,
     ) -> None:
@@ -63,6 +70,7 @@ class MainWindow(QMainWindow):
         self.config_loader = config_loader
         self.importer = importer
         self.contacts_importer = contacts_importer
+        self.articles_importer = articles_importer
         self.extractor = extractor
         self.classifier = classifier
         self.builder = builder
@@ -75,12 +83,14 @@ class MainWindow(QMainWindow):
         self.visible_groups: list[dict] = []
         self.last_action: dict | None = None
         self.change_log: list[str] = []
+        self.current_articles: list[dict] = []
         
         self.mandants: list[dict] = self._load_mandants()
         self.active_mandant_id: str = self.mandants[0]["id"] if self.mandants else ""
 
         self.current_sort_column = 1
         self.current_sort_order = Qt.AscendingOrder
+        self._geo_cache: dict[str, tuple[float, float]] = {}
 
         self.open_button = QPushButton("Datei öffnen")
         self.load_project_button = QPushButton("Projekt laden")
@@ -100,6 +110,101 @@ class MainWindow(QMainWindow):
             if index >= 0:
                 self.mandant_combo.setCurrentIndex(index)
         self.mandant_combo.currentIndexChanged.connect(self._on_mandant_changed_combo)
+
+        self.article_combo = QComboBox()
+        self.article_combo.setMinimumWidth(320)
+        self.article_combo.currentIndexChanged.connect(self._on_article_changed_combo)
+
+        self.article_add_button = QPushButton("Artikel hinzufügen")
+        self.article_remove_button = QPushButton("Artikel entfernen")
+        self.article_clear_button = QPushButton("Artikel leeren")
+        self.article_add_button.clicked.connect(self.add_selected_article_to_group)
+        self.article_remove_button.clicked.connect(self.remove_selected_article_from_group)
+        self.article_clear_button.clicked.connect(self.clear_selected_articles_for_group)
+
+        self.article_list_widget = QListWidget()
+        self.article_list_widget.setMinimumHeight(140)
+        self.article_list_widget.itemSelectionChanged.connect(self._on_article_list_selection_changed)
+
+        self.article_summary_label = QLabel("Artikel: kein Artikel gewählt")
+        self.article_summary_label.setWordWrap(True)
+
+        self.draft_title_edit = QLineEdit()
+        self.draft_title_edit.setPlaceholderText("Belegtitel für Lexware-Draft")
+        self.draft_title_edit.setText("Angebot")
+        self.draft_title_edit.textChanged.connect(self._update_draft_preview)
+
+        self.draft_introduction_edit = QPlainTextEdit()
+        self.draft_introduction_edit.setPlaceholderText("Einleitungstext für das Angebot ...")
+        self.draft_introduction_edit.setPlainText("Automatisch erzeugter Entwurf für das Angebot.")
+        self.draft_introduction_edit.setMinimumHeight(70)
+        self.draft_introduction_edit.textChanged.connect(self._update_draft_preview)
+
+        self.draft_remark_edit = QPlainTextEdit()
+        self.draft_remark_edit.setPlaceholderText("Nachbemerkung / Fußtext ...")
+        self.draft_remark_edit.setPlainText("Erzeugt durch Rechnungsautomatismus")
+        self.draft_remark_edit.setMinimumHeight(60)
+        self.draft_remark_edit.textChanged.connect(self._update_draft_preview)
+
+        self.draft_payment_term_days_spin = QSpinBox()
+        self.draft_payment_term_days_spin.setRange(0, 365)
+        self.draft_payment_term_days_spin.setValue(getattr(self.lexware_export_service, "default_payment_term_days", 14))
+        self.draft_payment_term_days_spin.setSuffix(" Tage netto")
+        self.draft_payment_term_days_spin.valueChanged.connect(self._update_draft_preview)
+
+        self.travel_mode_combo = QComboBox()
+        self.travel_mode_combo.addItem("Fahrtkosten als extra Artikel", "extra_article")
+        self.travel_mode_combo.addItem("Fahrtkosten im 1. Artikel enthalten", "included_in_first_article")
+
+        self.travel_hours_spin = QDoubleSpinBox()
+        self.travel_hours_spin.setRange(0.0, 1000.0)
+        self.travel_hours_spin.setDecimals(2)
+        self.travel_hours_spin.setSingleStep(0.25)
+        self.travel_hours_spin.setSuffix(" h")
+
+        self.travel_km_spin = QDoubleSpinBox()
+        self.travel_km_spin.setRange(0.0, 100000.0)
+        self.travel_km_spin.setDecimals(2)
+        self.travel_km_spin.setSingleStep(1.0)
+        self.travel_km_spin.setSuffix(" km")
+
+        self.travel_hour_rate_spin = QDoubleSpinBox()
+        self.travel_hour_rate_spin.setRange(0.0, 10000.0)
+        self.travel_hour_rate_spin.setDecimals(2)
+        self.travel_hour_rate_spin.setValue(150.0)
+        self.travel_hour_rate_spin.setSingleStep(10.0)
+        self.travel_hour_rate_spin.setPrefix("EUR ")
+
+        self.travel_km_rate_spin = QDoubleSpinBox()
+        self.travel_km_rate_spin.setRange(0.0, 100.0)
+        self.travel_km_rate_spin.setDecimals(2)
+        self.travel_km_rate_spin.setValue(0.7)
+        self.travel_km_rate_spin.setSingleStep(0.1)
+        self.travel_km_rate_spin.setPrefix("EUR ")
+
+        self.travel_recalc_button = QPushButton("KM automatisch berechnen")
+
+        self.travel_mode_combo.currentIndexChanged.connect(self._on_travel_settings_changed)
+        self.travel_hours_spin.valueChanged.connect(self._on_travel_settings_changed)
+        self.travel_km_spin.valueChanged.connect(self._on_travel_settings_changed)
+        self.travel_hour_rate_spin.valueChanged.connect(self._on_travel_settings_changed)
+        self.travel_km_rate_spin.valueChanged.connect(self._on_travel_settings_changed)
+        self.travel_recalc_button.clicked.connect(self._calculate_travel_km_for_selected)
+
+        self.draft_preview_view = QPlainTextEdit()
+        self.draft_preview_view.setReadOnly(True)
+        self.draft_preview_view.setPlaceholderText("Vorschau des Lexware-Drafts ...")
+        self.draft_preview_view.setMinimumHeight(150)
+        self.draft_preview_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.draft_preview_view.setStyleSheet(
+            "QPlainTextEdit {"
+            " background: #fbf7ef;"
+            " border: 1px solid #d7cab2;"
+            " border-radius: 8px;"
+            " padding: 8px;"
+            " font-family: 'DejaVu Sans Mono', monospace;"
+            " }"
+        )
 
         self.mark_approved_button = QPushButton("Freigeben")
         self.mark_review_button = QPushButton("Prüfen")
@@ -243,10 +348,53 @@ class MainWindow(QMainWindow):
         summary_bar.addWidget(self.summary_auto_review_label)
         summary_bar.addStretch()
 
-        note_bar = QVBoxLayout()
-        note_bar.addWidget(QLabel("Manuelle Notiz"))
-        note_bar.addWidget(self.note_edit)
-        note_bar.addWidget(self.save_note_button)
+        draft_bar = QVBoxLayout()
+        draft_bar.addWidget(QLabel("Angebot / Draft"))
+        draft_bar.addWidget(self.draft_preview_view)
+        draft_bar.addWidget(QLabel("Belegtitel"))
+        draft_bar.addWidget(self.draft_title_edit)
+        draft_bar.addWidget(QLabel("Einleitungstext"))
+        draft_bar.addWidget(self.draft_introduction_edit)
+        draft_bar.addWidget(QLabel("Nachbemerkung"))
+        draft_bar.addWidget(self.draft_remark_edit)
+
+        payment_term_row = QHBoxLayout()
+        payment_term_row.addWidget(QLabel("Zahlungsziel"))
+        payment_term_row.addWidget(self.draft_payment_term_days_spin)
+        payment_term_row.addStretch()
+        draft_bar.addLayout(payment_term_row)
+
+        draft_bar.addWidget(QLabel("Fahrtkostenmodus"))
+        draft_bar.addWidget(self.travel_mode_combo)
+
+        travel_hours_row = QHBoxLayout()
+        travel_hours_row.addWidget(QLabel("Fahrtstunden"))
+        travel_hours_row.addWidget(self.travel_hours_spin)
+        travel_hours_row.addWidget(QLabel("Stundensatz"))
+        travel_hours_row.addWidget(self.travel_hour_rate_spin)
+        draft_bar.addLayout(travel_hours_row)
+
+        travel_km_row = QHBoxLayout()
+        travel_km_row.addWidget(QLabel("Kilometer"))
+        travel_km_row.addWidget(self.travel_km_spin)
+        travel_km_row.addWidget(QLabel("KM-Satz"))
+        travel_km_row.addWidget(self.travel_km_rate_spin)
+        draft_bar.addLayout(travel_km_row)
+        draft_bar.addWidget(self.travel_recalc_button)
+
+        article_bar = QVBoxLayout()
+        article_bar.addWidget(QLabel("Artikel"))
+        article_bar.addWidget(self.article_combo)
+        article_button_bar = QHBoxLayout()
+        article_button_bar.addWidget(self.article_add_button)
+        article_button_bar.addWidget(self.article_remove_button)
+        article_button_bar.addWidget(self.article_clear_button)
+        article_bar.addLayout(article_button_bar)
+        article_bar.addWidget(self.article_list_widget)
+        article_bar.addWidget(self.article_summary_label)
+        article_bar.addWidget(QLabel("Manuelle Notiz"))
+        article_bar.addWidget(self.note_edit)
+        article_bar.addWidget(self.save_note_button)
 
         log_bar = QVBoxLayout()
         log_bar.addWidget(QLabel("Änderungsverlauf"))
@@ -265,7 +413,8 @@ class MainWindow(QMainWindow):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.addWidget(self.detail_view, 3)
-        right_layout.addLayout(note_bar, 2)
+        right_layout.addLayout(draft_bar, 2)
+        right_layout.addLayout(article_bar, 2)
         right_layout.addLayout(log_bar, 2)
 
         splitter = QSplitter(Qt.Horizontal)
@@ -328,6 +477,9 @@ class MainWindow(QMainWindow):
         self.shortcut_open.activated.connect(lambda: self.apply_shortcut_status("offen"))
         self.shortcut_undo.activated.connect(self.undo_last_action)
 
+        self._refresh_articles_for_mandant(self.active_mandant_id)
+        self._apply_draft_defaults_for_mandant(self.active_mandant_id)
+
     def _log_action(self, text: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.change_log.insert(0, f"{timestamp} | {text}")
@@ -354,7 +506,11 @@ class MainWindow(QMainWindow):
         return ""
 
     def _selected_rows(self) -> list[int]:
-        model = self.table_widget.selectionModel()
+        table_widget = getattr(self, "table_widget", None)
+        if table_widget is None:
+            return []
+
+        model = table_widget.selectionModel()
         if model is None:
             return []
         rows = sorted({index.row() for index in model.selectedRows()})
@@ -396,11 +552,438 @@ class MainWindow(QMainWindow):
         except Exception:
             return []
 
+    def _load_articles_for_mandant(self, mandant_id: str) -> list[dict]:
+        """Lädt Artikel nur für den angegebenen Mandanten."""
+        articles_importer = getattr(self, "articles_importer", None)
+        if articles_importer is None:
+            return []
+
+        mandant = self._get_mandant_by_id(mandant_id)
+        if not mandant:
+            return []
+
+        articles_path = mandant.get("products_csv", "")
+        if not articles_path:
+            return []
+
+        try:
+            return articles_importer.load(articles_path)
+        except Exception:
+            return []
+
+    def _mandant_full_address(self, mandant_id: str) -> str:
+        mandant = self._get_mandant_by_id(mandant_id)
+        if not mandant:
+            return ""
+
+        parts = [
+            str(mandant.get("strasse", "") or "").strip(),
+            " ".join(
+                p for p in [
+                    str(mandant.get("plz", "") or "").strip(),
+                    str(mandant.get("ort", "") or "").strip(),
+                ]
+                if p
+            ).strip(),
+        ]
+        return ", ".join(part for part in parts if part)
+
+    def _geocode_address(self, address: str) -> tuple[float, float] | None:
+        key = str(address or "").strip()
+        if not key:
+            return None
+        if key in self._geo_cache:
+            return self._geo_cache[key]
+
+        url = "https://nominatim.openstreetmap.org/search?" + parse.urlencode({
+            "q": key,
+            "format": "json",
+            "limit": 1,
+        })
+        req = request.Request(
+            url,
+            headers={"User-Agent": "Rechnungsautomatismus/1.0 (travel-km-calc)"},
+            method="GET",
+        )
+
+        try:
+            with request.urlopen(req, timeout=4) as resp:
+                payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+            if not isinstance(payload, list) or not payload:
+                return None
+
+            item = payload[0]
+            lat = float(item.get("lat"))
+            lon = float(item.get("lon"))
+            self._geo_cache[key] = (lat, lon)
+            return (lat, lon)
+        except (error.URLError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return None
+
+    def _route_distance_km(self, start: tuple[float, float], end: tuple[float, float]) -> float | None:
+        lat1, lon1 = start
+        lat2, lon2 = end
+        base_url = f"https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}"
+        url = base_url + "?" + parse.urlencode({"overview": "false", "alternatives": "false", "steps": "false"})
+        req = request.Request(
+            url,
+            headers={"User-Agent": "Rechnungsautomatismus/1.0 (travel-route-calc)"},
+            method="GET",
+        )
+
+        try:
+            with request.urlopen(req, timeout=6) as resp:
+                payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+
+            routes = payload.get("routes", []) if isinstance(payload, dict) else []
+            if not routes:
+                return None
+
+            meters = float(routes[0].get("distance", 0.0) or 0.0)
+            if meters <= 0:
+                return None
+
+            return round(meters / 1000.0, 2)
+        except (error.URLError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return None
+
+    def _calculate_travel_km_for_selected(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        if not self._calculate_travel_km_for_group(group, show_messages=True):
+            return
+
+        self._sync_travel_editor_from_group(group)
+        self._mark_changed([group])
+        self._save_manual_data()
+        self.detail_view.setPlainText(self._build_detail_text(group))
+        self._update_draft_preview()
+
+    def _calculate_travel_km_for_group(self, group: dict, show_messages: bool = False) -> bool:
+        origin = self._mandant_full_address(self.active_mandant_id)
+        destination = str(group.get("adresse_roh", "") or "").strip()
+        if not origin or not destination:
+            if show_messages:
+                QMessageBox.information(self, "KM-Berechnung", "Start- oder Zieladresse fehlt.")
+            return False
+
+        start_coords = self._geocode_address(origin)
+        end_coords = self._geocode_address(destination)
+        if start_coords is None or end_coords is None:
+            if show_messages:
+                QMessageBox.warning(self, "KM-Berechnung", "Adressen konnten nicht geocodiert werden.")
+            return False
+
+        distance = self._route_distance_km(start_coords, end_coords)
+        if distance is None:
+            if show_messages:
+                QMessageBox.warning(self, "KM-Berechnung", "Auto-Fahrstrecke konnte nicht berechnet werden.")
+            return False
+
+        group["travel_km"] = distance
+        return True
+
+    def _article_key(self, article: dict) -> str:
+        article_number = str((article or {}).get("Artikelnummer", "") or (article or {}).get("Artikelnummer ", "")).strip()
+        if article_number:
+            return article_number
+
+        name = str((article or {}).get("Bezeichnung", "") or "").strip().lower()
+        unit = str((article or {}).get("Einheit", "") or "").strip().lower()
+        tax = str((article or {}).get("Steuerart", "") or "").strip().lower()
+        price = str((article or {}).get("VK (Netto)", "") or "").strip().lower()
+        return "|".join([name, unit, tax, price])
+
+    def _article_display_text(self, article: dict) -> str:
+        article_number = str((article or {}).get("Artikelnummer", "") or "").strip()
+        name = str((article or {}).get("Bezeichnung", "") or "").strip() or "Unbenannter Artikel"
+        unit = str((article or {}).get("Einheit", "") or "").strip()
+        tax = str((article or {}).get("Steuerart", "") or "").strip()
+        price = str((article or {}).get("VK (Netto)", "") or "").strip()
+
+        parts = [name]
+        if article_number:
+            parts.insert(0, article_number)
+        suffix_parts = [part for part in [unit, tax, price] if part]
+        if suffix_parts:
+            parts.append(f"({', '.join(suffix_parts)})")
+        return " - ".join(parts)
+
+    def _selected_articles_for_group(self, group: dict) -> list[dict]:
+        articles = group.get("selected_articles", [])
+        if isinstance(articles, list) and articles:
+            return [dict(article) for article in articles if isinstance(article, dict)]
+
+        single_article = group.get("selected_article", {})
+        if isinstance(single_article, dict) and single_article:
+            return [dict(single_article)]
+
+        return []
+
+    def _set_selected_articles_for_group(self, group: dict, articles: list[dict]) -> None:
+        normalized_articles = [dict(article) for article in articles if isinstance(article, dict)]
+        group["selected_articles"] = normalized_articles
+
+        if normalized_articles:
+            self._apply_article_to_group(group, normalized_articles[0])
+        else:
+            group["selected_article"] = {}
+            group["selected_article_key"] = ""
+            group["selected_article_name"] = ""
+            group["selected_article_unit"] = ""
+            group["selected_article_price_net"] = ""
+            group["selected_article_tax_rate"] = ""
+
+    def _append_article_to_group(self, group: dict, article: dict) -> None:
+        articles = self._selected_articles_for_group(group)
+        articles.append(dict(article))
+        self._set_selected_articles_for_group(group, articles)
+
+    def _remove_article_from_group(self, group: dict, index: int) -> None:
+        articles = self._selected_articles_for_group(group)
+        if 0 <= index < len(articles):
+            del articles[index]
+            self._set_selected_articles_for_group(group, articles)
+
+    def _clear_articles_for_group(self, group: dict) -> None:
+        self._set_selected_articles_for_group(group, [])
+
+    def _resolve_article_by_key(self, article_key: str) -> dict | None:
+        key = str(article_key or "").strip()
+        if not key:
+            return None
+        for article in self.current_articles:
+            if self._article_key(article) == key:
+                return article
+        return None
+
+    def _selected_article_for_group(self, group: dict) -> dict | None:
+        articles = self._selected_articles_for_group(group)
+        if articles:
+            article = articles[0]
+            key = self._article_key(article)
+            resolved = self._resolve_article_by_key(key)
+            return resolved or article
+
+        article = group.get("selected_article")
+        if isinstance(article, dict) and article:
+            key = self._article_key(article)
+            resolved = self._resolve_article_by_key(key)
+            return resolved or article
+
+        key = str(group.get("selected_article_key", "") or "").strip()
+        return self._resolve_article_by_key(key)
+
+    def _apply_article_to_group(self, group: dict, article: dict | None) -> None:
+        if not article:
+            group["selected_article"] = {}
+            group["selected_article_key"] = ""
+            group["selected_article_name"] = ""
+            group["selected_article_unit"] = ""
+            group["selected_article_price_net"] = ""
+            group["selected_article_tax_rate"] = ""
+            return
+
+        group["selected_article"] = dict(article)
+        group["selected_article_key"] = self._article_key(article)
+        group["selected_article_name"] = str(article.get("Bezeichnung", "") or "").strip()
+        group["selected_article_unit"] = str(article.get("Einheit", "") or "").strip()
+        group["selected_article_price_net"] = str(article.get("VK (Netto)", "") or "").strip()
+        group["selected_article_tax_rate"] = str(article.get("Steuerart", "") or "").strip()
+
+    def _refresh_articles_for_mandant(self, mandant_id: str) -> None:
+        self.current_articles = self._load_articles_for_mandant(mandant_id)
+
+        article_combo = getattr(self, "article_combo", None)
+        article_summary_label = getattr(self, "article_summary_label", None)
+        article_list_widget = getattr(self, "article_list_widget", None)
+        if article_combo is None or article_summary_label is None:
+            return
+
+        current_selected_key = ""
+        current_group = self._selected_groups()[0] if len(self._selected_groups()) == 1 else None
+        if current_group:
+            current_selected_key = str(current_group.get("selected_article_key", "") or "").strip()
+
+        article_combo.blockSignals(True)
+        article_combo.clear()
+        article_combo.addItem("Kein Artikel gewählt", "")
+
+        for article in self.current_articles:
+            article_combo.addItem(self._article_display_text(article), self._article_key(article))
+
+        index = article_combo.findData(current_selected_key)
+        if index >= 0:
+            article_combo.setCurrentIndex(index)
+        else:
+            article_combo.setCurrentIndex(0)
+        article_combo.blockSignals(False)
+
+        self._update_article_summary(current_group)
+        if article_list_widget is not None and current_group is not None:
+            self._sync_article_list_widget(current_group)
+
+    def _update_article_summary(self, group: dict | None) -> None:
+        if not group:
+            self.article_summary_label.setText("Artikel: kein Artikel gewählt")
+            return
+
+        articles = self._selected_articles_for_group(group)
+        if not articles:
+            article = self._selected_article_for_group(group)
+            if not article:
+                self.article_summary_label.setText("Artikel: kein Artikel gewählt")
+                return
+
+            parts = [str(article.get("Bezeichnung", "") or "").strip()]
+            if article.get("Artikelnummer", ""):
+                parts.insert(0, str(article.get("Artikelnummer", "") or "").strip())
+            self.article_summary_label.setText(f"Artikel: {' - '.join(part for part in parts if part)}")
+            return
+
+        first_article = articles[0]
+        parts = [str(first_article.get("Bezeichnung", "") or "").strip()]
+        if first_article.get("Artikelnummer", ""):
+            parts.insert(0, str(first_article.get("Artikelnummer", "") or "").strip())
+        summary = f"Artikel: {len(articles)} ausgewählt"
+        if any(parts):
+            summary += f" | {' - '.join(part for part in parts if part)}"
+        self.article_summary_label.setText(summary)
+
+    def _sync_article_list_widget(self, group: dict | None) -> None:
+        article_list_widget = getattr(self, "article_list_widget", None)
+        if article_list_widget is None:
+            return
+
+        article_list_widget.blockSignals(True)
+        article_list_widget.clear()
+
+        articles = self._selected_articles_for_group(group or {}) if group else []
+        for article in articles:
+            item = QListWidgetItem(self._article_display_text(article))
+            item.setData(Qt.UserRole, self._article_key(article))
+            article_list_widget.addItem(item)
+
+        article_list_widget.blockSignals(False)
+
+    def _current_group_for_article_editing(self) -> dict | None:
+        row = self._current_selected_row()
+        if row < 0:
+            return None
+        return self.visible_groups[row]
+
+    def _on_article_changed_combo(self) -> None:
+        row = self._current_selected_row()
+        if row < 0:
+            self._update_article_summary(None)
+            return
+
+        group = self.visible_groups[row]
+        article_key = str(self.article_combo.currentData() or "").strip()
+        article = self._resolve_article_by_key(article_key)
+        if article:
+            self.article_summary_label.setText(self._article_display_text(article))
+        else:
+            self._update_article_summary(group)
+
+    def add_selected_article_to_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        article_key = str(self.article_combo.currentData() or "").strip()
+        article = self._resolve_article_by_key(article_key)
+        if not article:
+            return
+
+        self._append_article_to_group(group, article)
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+
+    def remove_selected_article_from_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        article_list_widget = getattr(self, "article_list_widget", None)
+        if article_list_widget is None:
+            return
+
+        row = article_list_widget.currentRow()
+        if row < 0:
+            return
+
+        self._remove_article_from_group(group, row)
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+
+    def clear_selected_articles_for_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        self._clear_articles_for_group(group)
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+
+    def _on_article_list_selection_changed(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is not None:
+            self._update_article_summary(group)
+
+    def _refresh_article_editor_for_group(self, group: dict | None) -> None:
+        if group is None:
+            self.article_combo.blockSignals(True)
+            self.article_combo.setCurrentIndex(0)
+            self.article_combo.blockSignals(False)
+            article_list_widget = getattr(self, "article_list_widget", None)
+            if article_list_widget is not None:
+                article_list_widget.blockSignals(True)
+                article_list_widget.clear()
+                article_list_widget.blockSignals(False)
+            self._update_article_summary(None)
+            return
+
+        self._sync_article_list_widget(group)
+        articles = self._selected_articles_for_group(group)
+        if articles:
+            article_key = self._article_key(articles[0])
+            index = self.article_combo.findData(article_key)
+            self.article_combo.blockSignals(True)
+            self.article_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.article_combo.blockSignals(False)
+        else:
+            self.article_combo.blockSignals(True)
+            self.article_combo.setCurrentIndex(0)
+            self.article_combo.blockSignals(False)
+        self._update_article_summary(group)
+
+    def _refresh_group_view_after_article_change(self, group: dict) -> None:
+        self._update_article_summary(group)
+        self.detail_view.setPlainText(self._build_detail_text(group))
+        self.refresh_table()
+        self._select_groups_by_keys([self._build_group_key(group)])
+
+    def _get_lexware_company_id_for_mandant(self, mandant_id: str) -> str:
+        mandant = self._get_mandant_by_id(mandant_id)
+        if not mandant:
+            return ""
+        return str(mandant.get("lexware_company_id", "") or "").strip()
+
     def _apply_customer_matching_for_mandant(self, mandant_id: str) -> None:
         """Wendet Customer-Matching auf alle Gruppen für den aktiven Mandanten an."""
         contacts = self._load_contacts_for_mandant(mandant_id)
 
         for group in self.groups:
+            group["mandant_id"] = mandant_id
             group["customer_match_state"] = "nicht_zugeordnet"
             group["customer_match_name"] = ""
             group["customer_match_number"] = ""
@@ -428,6 +1011,8 @@ class MainWindow(QMainWindow):
 
         self.active_mandant_id = mandant_id
         self._apply_customer_matching_for_mandant(mandant_id)
+        self._refresh_articles_for_mandant(mandant_id)
+        self._apply_draft_defaults_for_mandant(mandant_id)
         self._save_manual_data()
         self._log_action(f"Mandant gewechselt | {self._get_mandant_by_id(mandant_id).get('display_name', mandant_id)}")
         self.refresh_table()
@@ -508,10 +1093,249 @@ class MainWindow(QMainWindow):
 
     def _is_text_input_focused(self) -> bool:
         focused = self.focusWidget()
-        return focused in {self.note_edit, self.search_input}
+        return focused in {
+            getattr(self, "note_edit", None),
+            getattr(self, "search_input", None),
+            getattr(self, "draft_title_edit", None),
+            getattr(self, "draft_introduction_edit", None),
+            getattr(self, "draft_remark_edit", None),
+            getattr(self, "travel_hours_spin", None),
+            getattr(self, "travel_km_spin", None),
+            getattr(self, "travel_hour_rate_spin", None),
+            getattr(self, "travel_km_rate_spin", None),
+            getattr(self, "travel_mode_combo", None),
+        }
+
+    def _draft_export_settings(self) -> dict:
+        title_widget = getattr(self, "draft_title_edit", None)
+        introduction_widget = getattr(self, "draft_introduction_edit", None)
+        remark_widget = getattr(self, "draft_remark_edit", None)
+        payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+
+        return {
+            "title": title_widget.text().strip() if title_widget is not None else "Angebot",
+            "introduction": introduction_widget.toPlainText().strip() if introduction_widget is not None else "Automatisch erzeugter Entwurf für das Angebot.",
+            "remark": remark_widget.toPlainText().strip() if remark_widget is not None else "Erzeugt durch Rechnungsautomatismus",
+            "payment_term_days": payment_term_widget.value() if payment_term_widget is not None else 14,
+        }
+
+    def _default_travel_mode_for_group(self, group: dict) -> str:
+        customer = str((group or {}).get("kunde_roh", "") or "").strip().lower()
+        if "faber etec" in customer:
+            return "included_in_first_article"
+        return "extra_article"
+
+    def _ensure_travel_fields_for_group(self, group: dict) -> None:
+        default_mode = self._default_travel_mode_for_group(group)
+        group.setdefault("travel_mode", default_mode)
+        group.setdefault("travel_hours", 0.0)
+        group.setdefault("travel_km", 0.0)
+        group.setdefault("travel_hour_rate", 150.0)
+        group.setdefault("travel_km_rate", 0.7)
+
+    def _travel_amount_for_group(self, group: dict) -> float:
+        self._ensure_travel_fields_for_group(group)
+        hours = float(group.get("travel_hours", 0.0) or 0.0)
+        km = float(group.get("travel_km", 0.0) or 0.0)
+        hour_rate = float(group.get("travel_hour_rate", 150.0) or 0.0)
+        km_rate = float(group.get("travel_km_rate", 0.7) or 0.0)
+        return round((hours * hour_rate) + (km * km_rate), 2)
+
+    def _sync_travel_editor_from_group(self, group: dict | None) -> None:
+        widgets = [
+            self.travel_mode_combo,
+            self.travel_hours_spin,
+            self.travel_km_spin,
+            self.travel_hour_rate_spin,
+            self.travel_km_rate_spin,
+        ]
+        for widget in widgets:
+            widget.blockSignals(True)
+
+        if group is None:
+            self.travel_mode_combo.setCurrentIndex(0)
+            self.travel_hours_spin.setValue(0.0)
+            self.travel_km_spin.setValue(0.0)
+            self.travel_hour_rate_spin.setValue(150.0)
+            self.travel_km_rate_spin.setValue(0.7)
+        else:
+            self._ensure_travel_fields_for_group(group)
+            mode = str(group.get("travel_mode", "") or self._default_travel_mode_for_group(group))
+            idx = self.travel_mode_combo.findData(mode)
+            self.travel_mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self.travel_hours_spin.setValue(float(group.get("travel_hours", 0.0) or 0.0))
+            self.travel_km_spin.setValue(float(group.get("travel_km", 0.0) or 0.0))
+            self.travel_hour_rate_spin.setValue(float(group.get("travel_hour_rate", 150.0) or 150.0))
+            self.travel_km_rate_spin.setValue(float(group.get("travel_km_rate", 0.7) or 0.7))
+
+        for widget in widgets:
+            widget.blockSignals(False)
+
+    def _apply_travel_editor_to_group(self, group: dict) -> None:
+        self._ensure_travel_fields_for_group(group)
+        group["travel_mode"] = str(self.travel_mode_combo.currentData() or self._default_travel_mode_for_group(group))
+        group["travel_hours"] = float(self.travel_hours_spin.value())
+        group["travel_km"] = float(self.travel_km_spin.value())
+        group["travel_hour_rate"] = float(self.travel_hour_rate_spin.value())
+        group["travel_km_rate"] = float(self.travel_km_rate_spin.value())
+
+    def _on_travel_settings_changed(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        self._apply_travel_editor_to_group(group)
+        self._mark_changed([group])
+        self._save_manual_data()
+        self.detail_view.setPlainText(self._build_detail_text(group))
+        self._update_draft_preview()
+
+    def _update_draft_preview(self) -> None:
+        preview_widget = getattr(self, "draft_preview_view", None)
+        if preview_widget is None:
+            return
+
+        settings = self._draft_export_settings()
+        selected_groups = self._selected_groups()
+        group = selected_groups[0] if len(selected_groups) == 1 else None
+
+        lines = [
+            f"{settings['title']}",
+            "=" * max(len(settings["title"]), 9),
+            f"Einleitung: {settings['introduction']}",
+            f"Nachbemerkung: {settings['remark']}",
+            f"Zahlungsziel: {settings['payment_term_days']} Tage netto",
+        ]
+
+        if group is not None:
+            selected_articles = self._selected_articles_for_group(group)
+            if not selected_articles:
+                selected_article = self._selected_article_for_group(group)
+                selected_articles = [selected_article] if selected_article else []
+
+            article_count = len(selected_articles)
+            lines.extend([
+                "",
+                "Belegdaten",
+                "----------",
+                f"Kunde  : {group.get('kunde_roh', '')}",
+                f"Projekt: {group.get('projekt_roh', '')}",
+                f"Positionen: {article_count if article_count else 1}",
+                f"Fahrtkostenmodus: {group.get('travel_mode', self._default_travel_mode_for_group(group))}",
+                f"Fahrtstunden: {group.get('travel_hours', 0.0)}",
+                f"Fahrtkilometer: {group.get('travel_km', 0.0)}",
+                f"Stundensatz: {group.get('travel_hour_rate', 150.0)} EUR",
+                f"KM-Satz: {group.get('travel_km_rate', 0.7)} EUR",
+                f"Fahrtkosten gesamt: {self._travel_amount_for_group(group)} EUR",
+            ])
+
+            if selected_articles:
+                lines.append("")
+                lines.append("Positionen")
+                lines.append("----------")
+                for index, article in enumerate(selected_articles, start=1):
+                    if not isinstance(article, dict):
+                        continue
+
+                    article_number = str(article.get("Artikelnummer", "") or "").strip()
+                    article_name = str(article.get("Bezeichnung", "") or "").strip() or f"Artikel {index}"
+                    article_unit = str(article.get("Einheit", "") or "").strip() or "Stk"
+                    article_price = str(article.get("VK (Netto)", "") or "").strip() or "0,00"
+                    article_tax = str(article.get("Steuerart", "") or "").strip() or "19%"
+
+                    title_parts = [part for part in [article_number, article_name] if part]
+                    lines.append(f"{index:>2}. {' - '.join(title_parts)}")
+                    lines.append(f"    Einheit: {article_unit} | Netto: {article_price} | Steuer: {article_tax}")
+
+        preview_widget.setPlainText("\n".join(lines))
+
+    def _set_default_draft_export_settings(self) -> None:
+        title_widget = getattr(self, "draft_title_edit", None)
+        introduction_widget = getattr(self, "draft_introduction_edit", None)
+        remark_widget = getattr(self, "draft_remark_edit", None)
+        payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+
+        if title_widget is not None:
+            title_widget.setText("Angebot")
+        if introduction_widget is not None:
+            introduction_widget.setPlainText("Automatisch erzeugter Entwurf für das Angebot.")
+        if remark_widget is not None:
+            remark_widget.setPlainText("Erzeugt durch Rechnungsautomatismus")
+        if payment_term_widget is not None:
+            payment_term_widget.setValue(14)
+
+    def _apply_draft_export_settings(self, settings: dict | None) -> None:
+        if not isinstance(settings, dict):
+            return
+
+        title_widget = getattr(self, "draft_title_edit", None)
+        introduction_widget = getattr(self, "draft_introduction_edit", None)
+        remark_widget = getattr(self, "draft_remark_edit", None)
+        payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+
+        if title_widget is not None:
+            title = str(settings.get("title", "") or "").strip()
+            if title:
+                title_widget.setText(title)
+
+        if introduction_widget is not None:
+            introduction = str(settings.get("introduction", "") or "").strip()
+            if introduction:
+                introduction_widget.setPlainText(introduction)
+
+        if remark_widget is not None:
+            remark = str(settings.get("remark", "") or "").strip()
+            if remark:
+                remark_widget.setPlainText(remark)
+
+        if payment_term_widget is not None:
+            raw_days = settings.get("payment_term_days", None)
+            try:
+                payment_term_widget.setValue(max(int(raw_days), 0))
+            except Exception:
+                pass
+
+    def _apply_draft_defaults_for_mandant(self, mandant_id: str) -> None:
+        mandant = self._get_mandant_by_id(mandant_id)
+        if not mandant:
+            return
+
+        payment_terms = str(mandant.get("default_payment_terms", "") or "").strip()
+        payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+        if payment_term_widget is None or not payment_terms:
+            return
+
+        match = re.search(r"\d+", payment_terms)
+        if match:
+            try:
+                payment_term_widget.setValue(max(int(match.group(0)), 0))
+            except Exception:
+                pass
+
+        title_widget = getattr(self, "draft_title_edit", None)
+        introduction_widget = getattr(self, "draft_introduction_edit", None)
+        remark_widget = getattr(self, "draft_remark_edit", None)
+
+        title_default = str(mandant.get("default_draft_title", "") or "").strip()
+        if title_widget is not None and title_default:
+            title_widget.setText(title_default)
+
+        introduction_default = str(mandant.get("default_draft_introduction", "") or "").strip()
+        if introduction_widget is not None and introduction_default:
+            introduction_widget.setPlainText(introduction_default)
+
+        remark_default = str(mandant.get("default_draft_remark", "") or "").strip()
+        if remark_widget is not None and remark_default:
+            remark_widget.setPlainText(remark_default)
+
+        self._update_draft_preview()
 
     def _current_selected_row(self) -> int:
-        row = self.table_widget.currentRow()
+        table_widget = getattr(self, "table_widget", None)
+        if table_widget is None:
+            return -1
+
+        row = table_widget.currentRow()
         if row < 0 or row >= len(self.visible_groups):
             return -1
         return row
@@ -537,10 +1361,17 @@ class MainWindow(QMainWindow):
             "key": self._build_group_key(group),
             "manueller_status": group.get("manueller_status", "offen"),
             "manuelle_notiz": group.get("manuelle_notiz", ""),
+            "selected_article_key": group.get("selected_article_key", ""),
+            "selected_article": group.get("selected_article", {}),
             "_last_changed_at": group.get("_last_changed_at", ""),
             "lexware_export_status": group.get("lexware_export_status", ""),
             "lexware_export_id": group.get("lexware_export_id", ""),
             "lexware_exported_at": group.get("lexware_exported_at", ""),
+            "travel_mode": group.get("travel_mode", ""),
+            "travel_hours": group.get("travel_hours", 0.0),
+            "travel_km": group.get("travel_km", 0.0),
+            "travel_hour_rate": group.get("travel_hour_rate", 150.0),
+            "travel_km_rate": group.get("travel_km_rate", 0.7),
         }
 
     def _restore_group_states(self, states: list[dict]) -> None:
@@ -550,10 +1381,21 @@ class MainWindow(QMainWindow):
             if key in state_map:
                 group["manueller_status"] = state_map[key].get("manueller_status", "offen")
                 group["manuelle_notiz"] = state_map[key].get("manuelle_notiz", "")
+                article = state_map[key].get("selected_article", {})
+                if isinstance(article, dict) and article:
+                    self._apply_article_to_group(group, article)
+                else:
+                    group["selected_article"] = {}
+                    group["selected_article_key"] = state_map[key].get("selected_article_key", "")
                 group["_last_changed_at"] = state_map[key].get("_last_changed_at", "")
                 group["lexware_export_status"] = state_map[key].get("lexware_export_status", "")
                 group["lexware_export_id"] = state_map[key].get("lexware_export_id", "")
                 group["lexware_exported_at"] = state_map[key].get("lexware_exported_at", "")
+                group["travel_mode"] = state_map[key].get("travel_mode", self._default_travel_mode_for_group(group))
+                group["travel_hours"] = float(state_map[key].get("travel_hours", 0.0) or 0.0)
+                group["travel_km"] = float(state_map[key].get("travel_km", 0.0) or 0.0)
+                group["travel_hour_rate"] = float(state_map[key].get("travel_hour_rate", 150.0) or 150.0)
+                group["travel_km_rate"] = float(state_map[key].get("travel_km_rate", 0.7) or 0.7)
 
     def undo_last_action(self) -> None:
         if not self.last_action:
@@ -609,6 +1451,9 @@ class MainWindow(QMainWindow):
         for group in self.groups:
             group.setdefault("manueller_status", "offen")
             group.setdefault("manuelle_notiz", "")
+            group.setdefault("selected_articles", [])
+            group.setdefault("selected_article_key", "")
+            group.setdefault("selected_article", {})
             group.setdefault("_last_changed_at", "")
             group.setdefault("lexware_export_status", "")
             group.setdefault("lexware_export_id", "")
@@ -616,11 +1461,13 @@ class MainWindow(QMainWindow):
             group.setdefault("customer_match_state", "nicht_zugeordnet")
             group.setdefault("customer_match_name", "")
             group.setdefault("customer_match_number", "")
+            self._ensure_travel_fields_for_group(group)
 
         # Setze active_mandant_id auf den Standard-Mandanten (oder bewahre ihn)
         if not self.active_mandant_id or self.active_mandant_id not in [m.get("id") for m in self.mandants]:
             self.active_mandant_id = self.mandants[0]["id"] if self.mandants else ""
 
+        self._refresh_articles_for_mandant(self.active_mandant_id)
         self._apply_customer_matching_for_mandant(self.active_mandant_id)
 
         self._apply_saved_manual_data()
@@ -642,10 +1489,6 @@ class MainWindow(QMainWindow):
             return []
 
         paths: list[Path] = []
-        default_contacts = Path("contacts.csv")
-        if default_contacts.exists():
-            paths.append(default_contacts)
-
         try:
             mandants = self.config_loader.load_json("mandants.json").get("mandants", [])
         except Exception:
@@ -850,12 +1693,20 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        project_data = {"source_file": self.current_file_path, "groups": {}}
+        project_data = {"source_file": self.current_file_path, "groups": {}, "draft_settings": self._draft_export_settings()}
         for group in self.groups:
             key = self._build_group_key(group)
             project_data["groups"][key] = {
                 "manueller_status": group.get("manueller_status", "offen"),
                 "manuelle_notiz": group.get("manuelle_notiz", ""),
+                "selected_articles": group.get("selected_articles", []),
+                "selected_article_key": group.get("selected_article_key", ""),
+                "selected_article": group.get("selected_article", {}),
+                "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
+                "travel_hours": group.get("travel_hours", 0.0),
+                "travel_km": group.get("travel_km", 0.0),
+                "travel_hour_rate": group.get("travel_hour_rate", 150.0),
+                "travel_km_rate": group.get("travel_km_rate", 0.7),
                 "lexware_export_status": group.get("lexware_export_status", ""),
                 "lexware_export_id": group.get("lexware_export_id", ""),
                 "lexware_exported_at": group.get("lexware_exported_at", ""),
@@ -882,6 +1733,7 @@ class MainWindow(QMainWindow):
         session_data = {
             "source_file": self.current_file_path,
             "active_mandant_id": self.active_mandant_id,
+            "draft_settings": self._draft_export_settings(),
             "groups": {},
             "change_log": self.change_log,
             "saved_at": datetime.now().isoformat(),
@@ -892,6 +1744,14 @@ class MainWindow(QMainWindow):
             session_data["groups"][key] = {
                 "manueller_status": group.get("manueller_status", "offen"),
                 "manuelle_notiz": group.get("manuelle_notiz", ""),
+                "selected_articles": group.get("selected_articles", []),
+                "selected_article_key": group.get("selected_article_key", ""),
+                "selected_article": group.get("selected_article", {}),
+                "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
+                "travel_hours": group.get("travel_hours", 0.0),
+                "travel_km": group.get("travel_km", 0.0),
+                "travel_hour_rate": group.get("travel_hour_rate", 150.0),
+                "travel_km_rate": group.get("travel_km_rate", 0.7),
                 "_last_changed_at": group.get("_last_changed_at", ""),
                 "lexware_export_status": group.get("lexware_export_status", ""),
                 "lexware_export_id": group.get("lexware_export_id", ""),
@@ -918,6 +1778,7 @@ class MainWindow(QMainWindow):
 
         source_file = session_data.get("source_file", "")
         group_data = session_data.get("groups", {})
+        draft_settings = session_data.get("draft_settings", {})
         saved_mandant_id = session_data.get("active_mandant_id", "")
         
         if not source_file:
@@ -935,6 +1796,11 @@ class MainWindow(QMainWindow):
                 self._on_mandant_changed(saved_mandant_id)
             self.mandant_combo.blockSignals(False)
 
+        self._set_default_draft_export_settings()
+        self._apply_draft_defaults_for_mandant(self.active_mandant_id)
+        self._apply_draft_export_settings(draft_settings)
+        self._update_draft_preview()
+
         for group in self.groups:
             key = self._build_group_key(group)
             if key in group_data:
@@ -942,7 +1808,18 @@ class MainWindow(QMainWindow):
                 if isinstance(entry, dict):
                     group["manueller_status"] = entry.get("manueller_status", "offen")
                     group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
+                    article = entry.get("selected_article", {})
+                    if isinstance(article, dict) and article:
+                        self._apply_article_to_group(group, article)
+                    else:
+                        group["selected_article"] = {}
+                        group["selected_article_key"] = entry.get("selected_article_key", "")
                     group["_last_changed_at"] = entry.get("_last_changed_at", "")
+                    group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
+                    group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
+                    group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
+                    group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
+                    group["travel_km_rate"] = float(entry.get("travel_km_rate", 0.7) or 0.7)
                     group["lexware_export_status"] = entry.get("lexware_export_status", "")
                     group["lexware_export_id"] = entry.get("lexware_export_id", "")
                     group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
@@ -968,10 +1845,15 @@ class MainWindow(QMainWindow):
 
         source_file = project_data.get("source_file", "")
         group_data = project_data.get("groups", {})
+        draft_settings = project_data.get("draft_settings", {})
         if not source_file:
             return
 
         self.load_file(source_file)
+        self._set_default_draft_export_settings()
+        self._apply_draft_defaults_for_mandant(self.active_mandant_id)
+        self._apply_draft_export_settings(draft_settings)
+        self._update_draft_preview()
 
         for group in self.groups:
             key = self._build_group_key(group)
@@ -983,9 +1865,25 @@ class MainWindow(QMainWindow):
                 elif isinstance(entry, dict):
                     group["manueller_status"] = entry.get("manueller_status", "offen")
                     group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
+                    selected_articles = entry.get("selected_articles", [])
+                    if isinstance(selected_articles, list) and selected_articles:
+                        self._set_selected_articles_for_group(group, selected_articles)
+                    else:
+                        article = entry.get("selected_article", {})
+                        if isinstance(article, dict) and article:
+                            self._set_selected_articles_for_group(group, [article])
+                        else:
+                            group["selected_articles"] = []
+                            group["selected_article"] = {}
+                            group["selected_article_key"] = entry.get("selected_article_key", "")
                     group["lexware_export_status"] = entry.get("lexware_export_status", "")
                     group["lexware_export_id"] = entry.get("lexware_export_id", "")
                     group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
+                    group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
+                    group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
+                    group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
+                    group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
+                    group["travel_km_rate"] = float(entry.get("travel_km_rate", 0.7) or 0.7)
 
         self._save_manual_data()
         self.last_action = None
@@ -1091,9 +1989,19 @@ class MainWindow(QMainWindow):
         ok_count = 0
         fail_count = 0
         first_error = ""
+        export_settings = self._draft_export_settings()
 
         for group in export_candidates:
-            result = self.lexware_export_service.export_group_as_draft(group)
+            mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
+            company_id = self._get_lexware_company_id_for_mandant(mandant_id)
+            result = self.lexware_export_service.export_group_as_draft(
+                group,
+                company_id=company_id,
+                title=export_settings["title"],
+                introduction=export_settings["introduction"],
+                remark=export_settings["remark"],
+                payment_term_days=export_settings["payment_term_days"],
+            )
 
             if result.get("success"):
                 ok_count += 1
@@ -1339,9 +2247,23 @@ class MainWindow(QMainWindow):
         return "Offen"
 
     def _build_detail_text(self, group: dict) -> str:
+        selected_articles = self._selected_articles_for_group(group)
+        if selected_articles:
+            article_lines = [self._article_display_text(article) for article in selected_articles]
+            article_text = f"{len(selected_articles)} Artikel\n- " + "\n- ".join(article_lines)
+        else:
+            article_text = self._article_display_text(group.get('selected_article', {})) if group.get('selected_article') else 'Kein Artikel gewählt'
+
         detail_lines = [
             f"Manueller Status: {group.get('manueller_status', 'offen')}",
             f"Manuelle Notiz: {group.get('manuelle_notiz', '')}",
+            f"Artikel: {article_text}",
+            f"Fahrtkostenmodus: {group.get('travel_mode', self._default_travel_mode_for_group(group))}",
+            f"Fahrtstunden: {group.get('travel_hours', 0.0)}",
+            f"Fahrtkilometer: {group.get('travel_km', 0.0)}",
+            f"Fahrtstundensatz: {group.get('travel_hour_rate', 150.0)} EUR",
+            f"Fahrt-KM-Satz: {group.get('travel_km_rate', 0.7)} EUR",
+            f"Fahrtkosten gesamt: {self._travel_amount_for_group(group)} EUR",
             f"Lexware Exportstatus: {group.get('lexware_export_status', '')}",
             f"Lexware Export-ID: {group.get('lexware_export_id', '')}",
             f"Lexware Exportzeit: {group.get('lexware_exported_at', '')}",
@@ -1467,13 +2389,29 @@ class MainWindow(QMainWindow):
             key = self._build_group_key(group)
             manual_status = group.get("manueller_status", "offen")
             manual_note = group.get("manuelle_notiz", "")
+            selected_articles = group.get("selected_articles", [])
+            selected_article_key = group.get("selected_article_key", "")
+            selected_article = group.get("selected_article", {})
+            travel_mode = group.get("travel_mode", self._default_travel_mode_for_group(group))
+            travel_hours = float(group.get("travel_hours", 0.0) or 0.0)
+            travel_km = float(group.get("travel_km", 0.0) or 0.0)
+            travel_hour_rate = float(group.get("travel_hour_rate", 150.0) or 150.0)
+            travel_km_rate = float(group.get("travel_km_rate", 0.7) or 0.7)
             export_status = group.get("lexware_export_status", "")
             export_id = group.get("lexware_export_id", "")
             exported_at = group.get("lexware_exported_at", "")
-            if manual_status != "offen" or manual_note or export_status or export_id or exported_at:
+            if manual_status != "offen" or manual_note or selected_articles or selected_article_key or selected_article or export_status or export_id or exported_at or travel_hours or travel_km:
                 manual_data[key] = {
                     "manueller_status": manual_status,
                     "manuelle_notiz": manual_note,
+                    "selected_articles": selected_articles,
+                    "selected_article_key": selected_article_key,
+                    "selected_article": selected_article,
+                    "travel_mode": travel_mode,
+                    "travel_hours": travel_hours,
+                    "travel_km": travel_km,
+                    "travel_hour_rate": travel_hour_rate,
+                    "travel_km_rate": travel_km_rate,
                     "lexware_export_status": export_status,
                     "lexware_export_id": export_id,
                     "lexware_exported_at": exported_at,
@@ -1497,12 +2435,33 @@ class MainWindow(QMainWindow):
                 if isinstance(entry, str):
                     group["manueller_status"] = entry
                     group["manuelle_notiz"] = ""
-                elif isinstance(entry, dict):
-                    group["manueller_status"] = entry.get("manueller_status", "offen")
-                    group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
-                    group["lexware_export_status"] = entry.get("lexware_export_status", "")
-                    group["lexware_export_id"] = entry.get("lexware_export_id", "")
-                    group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
+                    continue
+
+                if not isinstance(entry, dict):
+                    continue
+
+                group["manueller_status"] = entry.get("manueller_status", "offen")
+                group["manuelle_notiz"] = entry.get("manuelle_notiz", "")
+                selected_articles = entry.get("selected_articles", [])
+                if isinstance(selected_articles, list) and selected_articles:
+                    self._set_selected_articles_for_group(group, selected_articles)
+                else:
+                    article = entry.get("selected_article", {})
+                    if isinstance(article, dict) and article:
+                        self._set_selected_articles_for_group(group, [article])
+                    else:
+                        group["selected_articles"] = []
+                        group["selected_article"] = {}
+                        group["selected_article_key"] = entry.get("selected_article_key", "")
+
+                group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
+                group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
+                group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
+                group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
+                group["travel_km_rate"] = float(entry.get("travel_km_rate", 0.7) or 0.7)
+                group["lexware_export_status"] = entry.get("lexware_export_status", "")
+                group["lexware_export_id"] = entry.get("lexware_export_id", "")
+                group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
 
     def on_table_selection_changed(self) -> None:
         selected_groups = self._selected_groups()
@@ -1511,12 +2470,20 @@ class MainWindow(QMainWindow):
         if not selected_groups:
             self.detail_view.clear()
             self.note_edit.clear()
+            self._refresh_article_editor_for_group(None)
+            self._sync_travel_editor_from_group(None)
+            self._update_draft_preview()
             return
 
         if len(selected_groups) == 1:
             group = selected_groups[0]
+            if float(group.get("travel_km", 0.0) or 0.0) <= 0:
+                self._calculate_travel_km_for_group(group, show_messages=False)
+            self._refresh_article_editor_for_group(group)
+            self._sync_travel_editor_from_group(group)
             self.detail_view.setPlainText(self._build_detail_text(group))
             self.note_edit.setPlainText(group.get("manuelle_notiz", ""))
+            self._update_draft_preview()
             return
 
         lines = [
@@ -1535,3 +2502,6 @@ class MainWindow(QMainWindow):
 
         self.detail_view.setPlainText("\n".join(lines))
         self.note_edit.clear()
+        self._refresh_article_editor_for_group(None)
+        self._sync_travel_editor_from_group(None)
+        self._update_draft_preview()

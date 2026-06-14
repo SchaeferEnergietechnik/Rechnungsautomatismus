@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 
 from app.config_loader import ConfigLoader
+from importer.articles_csv_importer import ArticlesCsvImporter
 from importer.contacts_csv_importer import ContactsCsvImporter
 from services.customer_matcher_service import CustomerMatcherService
 from services.invoice_proposal_mapper_service import InvoiceProposalMapperService
@@ -22,12 +23,16 @@ def config_loader():
                 "display_name": "G.E.S. Energietechnik GmbH",
                 "firma_name": "G.E.S. Energietechnik GmbH",
                 "contacts_csv": "data/ges_energietechnik/contacts.csv",
+                "products_csv": "data/ges_energietechnik/produkte_services.csv",
+                "lexware_company_id": "company-energietechnik",
             },
             {
                 "id": "ges_power_service",
                 "display_name": "G.E.S. Power Service GmbH",
                 "firma_name": "G.E.S. Power Service GmbH",
                 "contacts_csv": "data/ges_power_service/contacts.csv",
+                "products_csv": "data/ges_power_service/produkte_services.csv",
+                "lexware_company_id": "company-power-service",
             }
         ]
     })
@@ -58,6 +63,29 @@ def contacts_importer():
             return ges_ps_contacts
         return []
     
+    importer.load = Mock(side_effect=load_side_effect)
+    return importer
+
+
+@pytest.fixture
+def articles_importer():
+    """Mock ArticlesCsvImporter."""
+    importer = Mock(spec=ArticlesCsvImporter)
+
+    ges_et_articles = [
+        {"Artikelnummer": "ET-1", "Bezeichnung": "ET Service", "Einheit": "Stück", "Steuerart": "USt19", "VK (Netto)": "100,00"},
+    ]
+    ges_ps_articles = [
+        {"Artikelnummer": "PS-1", "Bezeichnung": "PS Service", "Einheit": "Stunde", "Steuerart": "USt19", "VK (Netto)": "200,00"},
+    ]
+
+    def load_side_effect(path):
+        if "ges_energietechnik" in path:
+            return ges_et_articles
+        elif "ges_power_service" in path:
+            return ges_ps_articles
+        return []
+
     importer.load = Mock(side_effect=load_side_effect)
     return importer
 
@@ -153,6 +181,26 @@ def test_load_contacts_for_mandant(config_loader, contacts_importer):
             ps_contacts = window._load_contacts_for_mandant("ges_power_service")
             assert len(ps_contacts) == 2
             assert ps_contacts[0]["firma"] == "Service Plus GmbH"
+
+
+def test_load_articles_for_mandant(config_loader, articles_importer):
+    """Test: Artikel werden nur für den angegebenen Mandanten geladen."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.articles_importer = articles_importer
+            window.mandants = window._load_mandants()
+
+            et_articles = window._load_articles_for_mandant("ges_energietechnik")
+            assert len(et_articles) == 1
+            assert et_articles[0]["Artikelnummer"] == "ET-1"
+
+            ps_articles = window._load_articles_for_mandant("ges_power_service")
+            assert len(ps_articles) == 1
+            assert ps_articles[0]["Artikelnummer"] == "PS-1"
 
 
 def test_apply_customer_matching_for_mandant(config_loader, contacts_importer, invoice_mapper):
@@ -265,6 +313,242 @@ def test_session_persistence_with_mandant(config_loader, contacts_importer):
             # Simuliere Session-Laden
             loaded_mandant_id = session_data.get("active_mandant_id", "")
             assert loaded_mandant_id == "ges_power_service"
+
+
+def test_lexware_export_uses_active_mandant_company_id(config_loader, contacts_importer):
+    """Test: Der Lexware-Export verwendet die Company-ID des aktiven Mandanten."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "kunde_roh": "PowerCorp",
+                    "customer_match_state": "eindeutig",
+                    "customer_match_name": "PowerCorp",
+                    "customer_match_number": "2002",
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window.draft_title_edit = Mock(text=Mock(return_value="Sonderangebot"))
+            window.draft_introduction_edit = Mock(toPlainText=Mock(return_value="Individuelle Einleitung"))
+            window.draft_remark_edit = Mock(toPlainText=Mock(return_value="Individuelle Nachbemerkung"))
+            window.draft_payment_term_days_spin = Mock(value=Mock(return_value=30))
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch('gui.main_window.QMessageBox.information'):
+                window.export_selected_groups_to_lexware_draft()
+
+            window.lexware_export_service.export_group_as_draft.assert_called_once()
+            _, kwargs = window.lexware_export_service.export_group_as_draft.call_args
+            assert kwargs["company_id"] == "company-power-service"
+            assert kwargs["title"] == "Sonderangebot"
+            assert kwargs["introduction"] == "Individuelle Einleitung"
+            assert kwargs["remark"] == "Individuelle Nachbemerkung"
+            assert kwargs["payment_term_days"] == 30
+
+
+def test_draft_settings_survive_project_roundtrip(config_loader, contacts_importer, tmp_path):
+    """Test: Draft-Felder werden mit Projektdatei gespeichert und geladen."""
+    from gui.main_window import MainWindow
+
+    project_file = tmp_path / "state.rvt.json"
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.current_file_path = "data/termine.xlsx"
+            window.groups = [
+                {
+                    "datum": "07.04.2026",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "manueller_status": "offen",
+                }
+            ]
+
+            title_widget = Mock()
+            title_widget.text = Mock(return_value="Sonderangebot")
+            title_widget.setText = Mock()
+
+            introduction_widget = Mock()
+            introduction_widget.toPlainText = Mock(return_value="Individuelle Einleitung")
+            introduction_widget.setPlainText = Mock()
+
+            remark_widget = Mock()
+            remark_widget.toPlainText = Mock(return_value="Individuelle Nachbemerkung")
+            remark_widget.setPlainText = Mock()
+
+            payment_widget = Mock()
+            payment_widget.value = Mock(return_value=30)
+            payment_widget.setValue = Mock()
+
+            window.draft_title_edit = title_widget
+            window.draft_introduction_edit = introduction_widget
+            window.draft_remark_edit = remark_widget
+            window.draft_payment_term_days_spin = payment_widget
+            window._log_action = Mock()
+            window._build_group_key = Mock(return_value="group-key")
+
+            with patch('gui.main_window.QFileDialog.getSaveFileName', return_value=(str(project_file), "")):
+                window.save_project_file()
+
+            saved = json.loads(project_file.read_text(encoding="utf-8"))
+            assert saved["draft_settings"]["title"] == "Sonderangebot"
+            assert saved["draft_settings"]["introduction"] == "Individuelle Einleitung"
+            assert saved["draft_settings"]["remark"] == "Individuelle Nachbemerkung"
+            assert saved["draft_settings"]["payment_term_days"] == 30
+
+            title_widget.text.return_value = "Geaendert"
+            introduction_widget.toPlainText.return_value = "Geaendert"
+            remark_widget.toPlainText.return_value = "Geaendert"
+            payment_widget.value.return_value = 14
+            title_widget.setText.reset_mock()
+            introduction_widget.setPlainText.reset_mock()
+            remark_widget.setPlainText.reset_mock()
+            payment_widget.setValue.reset_mock()
+
+            window.load_file = Mock()
+            window.refresh_table = Mock()
+            window.groups = [
+                {
+                    "datum": "07.04.2026",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "manueller_status": "offen",
+                }
+            ]
+            with patch('gui.main_window.QFileDialog.getOpenFileName', return_value=(str(project_file), "")):
+                window.load_project_file()
+
+            assert title_widget.setText.call_args_list[-1].args[0] == "Sonderangebot"
+            assert introduction_widget.setPlainText.call_args_list[-1].args[0] == "Individuelle Einleitung"
+            assert remark_widget.setPlainText.call_args_list[-1].args[0] == "Individuelle Nachbemerkung"
+            assert payment_widget.setValue.call_args_list[-1].args[0] == 30
+
+
+def test_mandant_defaults_fill_draft_fields(config_loader, contacts_importer):
+    """Test: Mandanten-Standardwerte werden in die Draft-Felder übernommen."""
+    from gui.main_window import MainWindow
+
+    config_loader.load_json = Mock(return_value={
+        "mandants": [
+            {
+                "id": "ges_power_service",
+                "display_name": "G.E.S. Power Service GmbH",
+                "contacts_csv": "data/ges_power_service/contacts.csv",
+                "products_csv": "data/ges_power_service/produkte_services.csv",
+                "lexware_company_id": "company-power-service",
+                "default_payment_terms": "21 Tage netto",
+                "default_draft_title": "Angebot Power Service",
+                "default_draft_introduction": "Einleitung Power Service",
+                "default_draft_remark": "Nachbemerkung Power Service",
+            }
+        ]
+    })
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+
+            title_widget = Mock()
+            title_widget.setText = Mock()
+            introduction_widget = Mock()
+            introduction_widget.setPlainText = Mock()
+            remark_widget = Mock()
+            remark_widget.setPlainText = Mock()
+            payment_widget = Mock()
+            payment_widget.setValue = Mock()
+
+            window.draft_title_edit = title_widget
+            window.draft_introduction_edit = introduction_widget
+            window.draft_remark_edit = remark_widget
+            window.draft_payment_term_days_spin = payment_widget
+            window.draft_preview_view = Mock()
+            window._update_draft_preview = Mock()
+
+            window._apply_draft_defaults_for_mandant("ges_power_service")
+
+            title_widget.setText.assert_called_with("Angebot Power Service")
+            introduction_widget.setPlainText.assert_called_with("Einleitung Power Service")
+            remark_widget.setPlainText.assert_called_with("Nachbemerkung Power Service")
+            payment_widget.setValue.assert_called_with(21)
+
+
+def test_draft_preview_shows_positions(config_loader, contacts_importer):
+    """Test: Die Draft-Vorschau zeigt die aus Artikeln abgeleiteten Positionen."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+
+            preview_widget = Mock()
+            preview_widget.setPlainText = Mock()
+            window.draft_preview_view = preview_widget
+
+            window._draft_export_settings = Mock(return_value={
+                "title": "Angebot",
+                "introduction": "Intro",
+                "remark": "Remark",
+                "payment_term_days": 14,
+            })
+            window._selected_groups = Mock(return_value=[{
+                "kunde_roh": "PowerCorp",
+                "projekt_roh": "Projekt X",
+            }])
+            window._selected_articles_for_group = Mock(return_value=[
+                {
+                    "Artikelnummer": "PS-1",
+                    "Bezeichnung": "PS Service",
+                    "Einheit": "Stunde",
+                    "Steuerart": "USt19",
+                    "VK (Netto)": "200,00",
+                },
+                {
+                    "Artikelnummer": "PS-2",
+                    "Bezeichnung": "Zusatzleistung",
+                    "Einheit": "Stk",
+                    "Steuerart": "USt19",
+                    "VK (Netto)": "50,00",
+                },
+            ])
+
+            window._update_draft_preview()
+
+            text = preview_widget.setPlainText.call_args.args[0]
+            assert "Positionen: 2" in text
+            assert "Positionen" in text
+            assert "PS-1 - PS Service" in text
+            assert "Einheit: Stunde | Netto: 200,00 | Steuer: USt19" in text
+            assert "PS-2 - Zusatzleistung" in text
+            assert "Einheit: Stk | Netto: 50,00 | Steuer: USt19" in text
 
 
 if __name__ == "__main__":

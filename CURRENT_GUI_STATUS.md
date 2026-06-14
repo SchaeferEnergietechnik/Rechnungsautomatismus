@@ -118,6 +118,12 @@ Enthält:
 - Detailansicht
 - Notizfeld
 - Änderungsverlauf
+- Draft-/Angebotseditor
+  - Belegtitel, Einleitung, Nachbemerkung, Zahlungsziel
+  - Fahrtkostenmodus pro Rechnung
+  - Fahrtstunden, KM, Stundensatz, KM-Satz (editierbar)
+  - automatische KM-Berechnung (Mandantenadresse -> Einsatzadresse)
+  - Draft-Vorschau mit Positions- und Fahrtkostenansicht
 
 ## 4.9 Mandantenverhalten (neu)
 
@@ -240,6 +246,7 @@ Freitextsuche über u. a.:
 Bei Auswahl einer einzelnen Gruppe zeigt die Detailansicht aktuell u. a.:
 - manueller Status
 - manuelle Notiz
+- Fahrtkostenmodus und berechnete Fahrtkostenwerte
 - Status
 - automatischer Status
 - Datum

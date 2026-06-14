@@ -99,6 +99,132 @@ class TestInvoicePositionService:
         assert len(proposal.positions) > 0
         assert all(isinstance(p, InvoicePosition) for p in proposal.positions)
 
+    def test_enrich_proposal_uses_selected_article(self, position_service, sample_group):
+        """Test: Ausgewählter Artikel wird für Positionsdaten verwendet."""
+        proposal = InvoiceProposal(
+            source_group_key="test_key",
+            start_date="01.01.2026",
+            end_date="03.01.2026",
+            kw="1",
+            customer_raw="Energietechnik AG",
+            project_raw="Heizungsanlage",
+        )
+        sample_group["selected_article"] = {
+            "Artikelnummer": "ET-1",
+            "Bezeichnung": "ET Service",
+            "Einheit": "Stunde",
+            "Steuerart": "USt19",
+            "VK (Netto)": "200,00",
+        }
+
+        position_service.enrich_proposal_with_positions(proposal, sample_group)
+
+        assert len(proposal.positions) == 1
+        assert proposal.positions[0].title == "ET-1 - ET Service"
+        assert proposal.positions[0].unit == "Stunde"
+        assert proposal.positions[0].unit_price_net == 200.0
+        assert proposal.positions[0].tax_rate == 19.0
+
+    def test_enrich_proposal_uses_multiple_selected_articles(self, position_service, sample_group):
+        """Test: Mehrere ausgewählte Artikel werden als mehrere Positionen übernommen."""
+        proposal = InvoiceProposal(
+            source_group_key="test_key",
+            start_date="01.01.2026",
+            end_date="03.01.2026",
+            kw="1",
+            customer_raw="Energietechnik AG",
+            project_raw="Heizungsanlage",
+        )
+        sample_group["selected_articles"] = [
+            {
+                "Artikelnummer": "ET-1",
+                "Bezeichnung": "ET Service 1",
+                "Einheit": "Stunde",
+                "Steuerart": "USt19",
+                "VK (Netto)": "200,00",
+            },
+            {
+                "Artikelnummer": "ET-2",
+                "Bezeichnung": "ET Service 2",
+                "Einheit": "Stück",
+                "Steuerart": "USt7",
+                "VK (Netto)": "50,00",
+            },
+        ]
+
+        position_service.enrich_proposal_with_positions(proposal, sample_group)
+
+        assert len(proposal.positions) == 2
+        assert proposal.positions[0].title == "ET-1 - ET Service 1"
+        assert proposal.positions[0].unit == "Stunde"
+        assert proposal.positions[0].unit_price_net == 200.0
+        assert proposal.positions[0].tax_rate == 19.0
+        assert proposal.positions[1].title == "ET-2 - ET Service 2"
+        assert proposal.positions[1].unit == "Stück"
+        assert proposal.positions[1].unit_price_net == 50.0
+        assert proposal.positions[1].tax_rate == 7.0
+
+    def test_travel_costs_as_extra_article(self, position_service, sample_group):
+        proposal = InvoiceProposal(
+            source_group_key="test_key",
+            start_date="01.01.2026",
+            end_date="03.01.2026",
+            kw="1",
+            customer_raw="Energietechnik AG",
+            project_raw="Heizungsanlage",
+        )
+        sample_group["selected_articles"] = [
+            {
+                "Artikelnummer": "ET-1",
+                "Bezeichnung": "ET Service",
+                "Einheit": "Stunde",
+                "Steuerart": "USt19",
+                "VK (Netto)": "200,00",
+            }
+        ]
+        sample_group["travel_mode"] = "extra_article"
+        sample_group["travel_hours"] = 2
+        sample_group["travel_hour_rate"] = 150
+        sample_group["travel_km"] = 10
+        sample_group["travel_km_rate"] = 0.7
+
+        position_service.enrich_proposal_with_positions(proposal, sample_group)
+
+        assert len(proposal.positions) == 2
+        assert proposal.positions[1].title == "Fahrtkosten"
+        assert proposal.positions[1].unit == "Pauschale"
+        assert proposal.positions[1].unit_price_net == 307.0
+
+    def test_travel_costs_included_in_first_article(self, position_service, sample_group):
+        proposal = InvoiceProposal(
+            source_group_key="test_key",
+            start_date="01.01.2026",
+            end_date="03.01.2026",
+            kw="1",
+            customer_raw="Energietechnik AG",
+            project_raw="Heizungsanlage",
+        )
+        sample_group["selected_articles"] = [
+            {
+                "Artikelnummer": "ET-1",
+                "Bezeichnung": "ET Service",
+                "Einheit": "Stunde",
+                "Steuerart": "USt19",
+                "VK (Netto)": "200,00",
+            }
+        ]
+        sample_group["travel_mode"] = "included_in_first_article"
+        sample_group["travel_hours"] = 2
+        sample_group["travel_hour_rate"] = 150
+        sample_group["travel_km"] = 10
+        sample_group["travel_km_rate"] = 0.7
+
+        position_service.enrich_proposal_with_positions(proposal, sample_group)
+
+        assert len(proposal.positions) == 1
+        assert proposal.positions[0].title == "ET-1 - ET Service"
+        assert proposal.positions[0].unit_price_net == 507.0
+
 
 class TestInvoiceValidationService:
     def test_validate_proposal_with_errors(self, validation_service):

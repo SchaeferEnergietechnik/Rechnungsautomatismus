@@ -24,9 +24,28 @@ Empfohlene Umgebungsvariablen:
 - `LEXWARE_TOKEN_URL`
 - `LEXWARE_COMPANY_ID`
 
+Wenn du mehrere Lexware-Accounts nutzt, kannst du je Mandant in `config/mandants.json` zusätzlich `lexware_company_id` pflegen. Der Export verwendet dann beim aktiven Mandanten diese Company-ID.
+
+Die mandantenspezifischen CSV-Dateien liegen ohne Ausnahme unter:
+- `data/ges_energietechnik/contacts.csv`
+- `data/ges_energietechnik/produkte_services.csv`
+- `data/ges_power_service/contacts.csv`
+- `data/ges_power_service/produkte_services.csv`
+
 Testmodus-Hinweis (Angebote statt Rechnungen):
 - Standard fuer Draft-Export ist aktuell `LEXWARE_DRAFT_ENDPOINT=/v1/quotations`, damit Tests keine Rechnungen erzeugen.
 - Fuer den spaeteren Echtbetrieb auf Rechnungen den Endpoint auf `LEXWARE_DRAFT_ENDPOINT=/v1/invoices` setzen.
+
+Fahrtkostenlogik (MVP):
+- Startadresse: aktive Mandantenadresse aus `config/mandants.json`
+- Zieladresse: Einsatzadresse aus Termin-Excel (`adresse_roh`)
+- KM werden automatisch als echte Auto-Fahrstrecke berechnet (Routing) und sind manuell anpassbar
+- Standardwerte pro Rechnung:
+	- `150 EUR/Stunde`
+	- `0,70 EUR/km`
+- Abrechnungsmodus pro Rechnung:
+	- `extra_article`
+	- `included_in_first_article`
 
 Wichtig:
 - Keine Zugangsdaten in versionierte JSON-Dateien unter `config/` eintragen.

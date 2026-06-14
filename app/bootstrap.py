@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication
 
 from app.config_loader import ConfigLoader
 from gui.main_window import MainWindow
+from importer.articles_csv_importer import ArticlesCsvImporter
 from importer.contacts_csv_importer import ContactsCsvImporter
 from importer.employee_block_extractor import EmployeeBlockExtractor
 from importer.excel_termin_importer import ExcelTerminImporter
@@ -23,6 +24,7 @@ class AppContext:
     config_loader: ConfigLoader
     importer: ExcelTerminImporter
     contacts_importer: ContactsCsvImporter
+    articles_importer: ArticlesCsvImporter
     extractor: EmployeeBlockExtractor
     classifier: BlockClassificationService
     builder: ProposalBuilderService
@@ -39,6 +41,7 @@ def bootstrap_application() -> AppContext:
     config_loader = ConfigLoader()
     importer = ExcelTerminImporter()
     contacts_importer = ContactsCsvImporter()
+    articles_importer = ArticlesCsvImporter()
     extractor = EmployeeBlockExtractor()
     classifier = BlockClassificationService()
     builder = ProposalBuilderService()
@@ -55,6 +58,7 @@ def bootstrap_application() -> AppContext:
         config_loader=config_loader,
         importer=importer,
         contacts_importer=contacts_importer,
+        articles_importer=articles_importer,
         extractor=extractor,
         classifier=classifier,
         builder=builder,
@@ -71,6 +75,7 @@ def bootstrap_application() -> AppContext:
         config_loader=config_loader,
         importer=importer,
         contacts_importer=contacts_importer,
+        articles_importer=articles_importer,
         extractor=extractor,
         classifier=classifier,
         builder=builder,
