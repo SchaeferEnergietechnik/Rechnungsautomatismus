@@ -158,3 +158,54 @@ def test_fetch_text_templates_filters_customer(monkeypatch):
     assert result["success"] is True
     assert len(result["templates"]) == 2
     assert result["templates"][0]["name"] == "Standard"
+
+
+def test_payload_includes_travel_text_in_extra_article_description():
+    service = LexwareDraftExportService()
+    group = _sample_group()
+    group["selected_articles"] = [
+        {
+            "Artikelnummer": "ET-1",
+            "Bezeichnung": "Service",
+            "Einheit": "Stunde",
+            "Steuerart": "USt19",
+            "VK (Netto)": "200,00",
+        }
+    ]
+    group["travel_mode"] = "extra_article"
+    group["travel_hours"] = 2
+    group["travel_hour_rate"] = 150
+    group["travel_km"] = 10
+    group["travel_km_rate"] = 0.7
+
+    payload = service._build_payload(group)
+
+    assert len(payload["lineItems"]) == 2
+    assert "Fahrtkostenangaben" not in payload["lineItems"][0]["description"]
+    assert "Fahrtkostenangaben" in payload["lineItems"][1]["description"]
+    assert "10.00 km" in payload["lineItems"][1]["description"]
+
+
+def test_payload_includes_travel_text_in_first_article_description_when_included():
+    service = LexwareDraftExportService()
+    group = _sample_group()
+    group["selected_articles"] = [
+        {
+            "Artikelnummer": "ET-1",
+            "Bezeichnung": "Service",
+            "Einheit": "Stunde",
+            "Steuerart": "USt19",
+            "VK (Netto)": "200,00",
+        }
+    ]
+    group["travel_mode"] = "included_in_first_article"
+    group["travel_hours"] = 2
+    group["travel_hour_rate"] = 150
+    group["travel_km"] = 10
+    group["travel_km_rate"] = 0.7
+
+    payload = service._build_payload(group)
+
+    assert len(payload["lineItems"]) == 1
+    assert "Fahrtkostenangaben" in payload["lineItems"][0]["description"]
+    assert "2.00 h" in payload["lineItems"][0]["description"]

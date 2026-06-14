@@ -170,6 +170,20 @@ class InvoicePositionService:
                 )
             )
 
+    def travel_detail_text(self, group: dict) -> str:
+        travel_amount = self._travel_amount(group)
+        if travel_amount <= 0:
+            return ""
+
+        hours = self._as_float(group.get("travel_hours", 0.0), 0.0)
+        km = self._as_float(group.get("travel_km", 0.0), 0.0)
+        hour_rate = self._as_float(group.get("travel_hour_rate", 150.0), 0.0)
+        km_rate = self._as_float(group.get("travel_km_rate", 0.7), 0.0)
+        return (
+            f"Fahrtkostenangaben: {hours:.2f} h x {hour_rate:.2f} EUR + "
+            f"{km:.2f} km x {km_rate:.2f} EUR = {travel_amount:.2f} EUR"
+        )
+
     def _travel_amount(self, group: dict) -> float:
         hours = self._as_float(group.get("travel_hours", 0.0), 0.0)
         km = self._as_float(group.get("travel_km", 0.0), 0.0)

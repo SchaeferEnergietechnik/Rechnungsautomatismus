@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -135,6 +136,13 @@ class MainWindow(QMainWindow):
 
         self.article_summary_label = QLabel("Artikel: kein Artikel gewählt")
         self.article_summary_label.setWordWrap(True)
+
+        self.article_price_spin = QDoubleSpinBox()
+        self.article_price_spin.setRange(0.0, 1000000.0)
+        self.article_price_spin.setDecimals(2)
+        self.article_price_spin.setSingleStep(10.0)
+        self.article_price_spin.setPrefix("EUR ")
+        self.article_price_spin.valueChanged.connect(self._on_article_price_changed)
 
         self.draft_title_edit = QLineEdit()
         self.draft_title_edit.setPlaceholderText("Belegtitel für Lexware-Draft")
@@ -271,12 +279,28 @@ class MainWindow(QMainWindow):
         self.table_widget.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.table_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table_widget.customContextMenuRequested.connect(self.open_context_menu)
+        self.table_widget.setStyleSheet(
+            "QTableWidget {"
+            " font-size: 12px;"
+            " gridline-color: #d9dfe7;"
+            " }"
+            "QHeaderView::section {"
+            " font-size: 12px;"
+            " font-weight: 600;"
+            " background: #eef2f7;"
+            " border: 1px solid #d9dfe7;"
+            " padding: 6px 4px;"
+            " }"
+        )
 
         header = self.table_widget.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
         for i in range(1, 12):
             header.setSectionResizeMode(i, QHeaderView.Interactive)
         header.setSectionResizeMode(12, QHeaderView.Stretch)
+        header.setMinimumSectionSize(48)
+        header.setDefaultSectionSize(120)
+        self.table_widget.verticalHeader().setDefaultSectionSize(30)
 
         header.resizeSection(0, 36)
         header.resizeSection(1, 110)
@@ -356,56 +380,50 @@ class MainWindow(QMainWindow):
         summary_bar.addWidget(self.summary_auto_review_label)
         summary_bar.addStretch()
 
+        draft_title = QLabel("Angebot / Draft")
+        draft_title.setStyleSheet("font-weight: 700; font-size: 13px;")
         draft_bar = QVBoxLayout()
-        draft_bar.addWidget(QLabel("Angebot / Draft"))
+        draft_bar.setContentsMargins(10, 10, 10, 10)
+        draft_bar.setSpacing(8)
+        draft_bar.addWidget(draft_title)
+        compact_hint = QLabel(
+            "Bearbeitung von Belegtitel, Texten, Zahlungsziel und Fahrtkosten im separaten Fenster:"
+            " Angebot/Rechnung bearbeiten"
+        )
+        compact_hint.setWordWrap(True)
+        compact_hint.setStyleSheet("color: #5f6368;")
+        draft_bar.addWidget(compact_hint)
         draft_bar.addWidget(self.draft_preview_view)
-        draft_bar.addWidget(QLabel("Belegtitel"))
-        draft_bar.addWidget(self.draft_title_edit)
-        draft_bar.addWidget(QLabel("Einleitungstext"))
-        draft_bar.addWidget(self.draft_introduction_edit)
-        draft_bar.addWidget(QLabel("Nachbemerkung"))
-        draft_bar.addWidget(self.draft_remark_edit)
 
-        payment_term_row = QHBoxLayout()
-        payment_term_row.addWidget(QLabel("Zahlungsziel"))
-        payment_term_row.addWidget(self.draft_payment_term_days_spin)
-        payment_term_row.addStretch()
-        draft_bar.addLayout(payment_term_row)
-
-        draft_bar.addWidget(QLabel("Fahrtkostenmodus"))
-        draft_bar.addWidget(self.travel_mode_combo)
-
-        travel_hours_row = QHBoxLayout()
-        travel_hours_row.addWidget(QLabel("Fahrtstunden"))
-        travel_hours_row.addWidget(self.travel_hours_spin)
-        travel_hours_row.addWidget(QLabel("Stundensatz"))
-        travel_hours_row.addWidget(self.travel_hour_rate_spin)
-        draft_bar.addLayout(travel_hours_row)
-
-        travel_km_row = QHBoxLayout()
-        travel_km_row.addWidget(QLabel("Kilometer"))
-        travel_km_row.addWidget(self.travel_km_spin)
-        travel_km_row.addWidget(QLabel("KM-Satz"))
-        travel_km_row.addWidget(self.travel_km_rate_spin)
-        draft_bar.addLayout(travel_km_row)
-        draft_bar.addWidget(self.travel_recalc_button)
-
+        article_title = QLabel("Artikel")
+        article_title.setStyleSheet("font-weight: 700; font-size: 13px;")
         article_bar = QVBoxLayout()
-        article_bar.addWidget(QLabel("Artikel"))
+        article_bar.setContentsMargins(10, 10, 10, 10)
+        article_bar.setSpacing(8)
+        article_bar.addWidget(article_title)
         article_bar.addWidget(self.article_combo)
         article_button_bar = QHBoxLayout()
+        article_button_bar.setSpacing(6)
         article_button_bar.addWidget(self.article_add_button)
         article_button_bar.addWidget(self.article_remove_button)
         article_button_bar.addWidget(self.article_clear_button)
         article_bar.addLayout(article_button_bar)
         article_bar.addWidget(self.article_list_widget)
         article_bar.addWidget(self.article_summary_label)
+        article_price_row = QHBoxLayout()
+        article_price_row.addWidget(QLabel("Preis (ausgewählter Artikel)"))
+        article_price_row.addWidget(self.article_price_spin)
+        article_bar.addLayout(article_price_row)
         article_bar.addWidget(QLabel("Manuelle Notiz"))
         article_bar.addWidget(self.note_edit)
         article_bar.addWidget(self.save_note_button)
 
+        log_title = QLabel("Änderungsverlauf")
+        log_title.setStyleSheet("font-weight: 700; font-size: 13px;")
         log_bar = QVBoxLayout()
-        log_bar.addWidget(QLabel("Änderungsverlauf"))
+        log_bar.setContentsMargins(10, 10, 10, 10)
+        log_bar.setSpacing(8)
+        log_bar.addWidget(log_title)
         log_bar.addWidget(self.log_view)
 
         left_widget = QWidget()
@@ -420,10 +438,39 @@ class MainWindow(QMainWindow):
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
-        right_layout.addWidget(self.detail_view, 3)
-        right_layout.addLayout(draft_bar, 2)
-        right_layout.addLayout(article_bar, 2)
-        right_layout.addLayout(log_bar, 2)
+        right_layout.setContentsMargins(8, 8, 8, 8)
+        right_layout.setSpacing(10)
+
+        detail_section = QFrame()
+        detail_section.setObjectName("rightSection")
+        detail_layout = QVBoxLayout(detail_section)
+        detail_layout.setContentsMargins(10, 10, 10, 10)
+        detail_layout.addWidget(self.detail_view)
+
+        draft_section = QFrame()
+        draft_section.setObjectName("rightSection")
+        draft_section.setLayout(draft_bar)
+
+        article_section = QFrame()
+        article_section.setObjectName("rightSection")
+        article_section.setLayout(article_bar)
+
+        log_section = QFrame()
+        log_section.setObjectName("rightSection")
+        log_section.setLayout(log_bar)
+
+        right_widget.setStyleSheet(
+            "QFrame#rightSection {"
+            " border: 1px solid #d9dfe7;"
+            " border-radius: 8px;"
+            " background: #f8fafc;"
+            " }"
+        )
+
+        right_layout.addWidget(detail_section, 3)
+        right_layout.addWidget(draft_section, 2)
+        right_layout.addWidget(article_section, 2)
+        right_layout.addWidget(log_section, 2)
 
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_widget)
@@ -800,6 +847,77 @@ class MainWindow(QMainWindow):
             parts.append(f"({', '.join(suffix_parts)})")
         return " - ".join(parts)
 
+    def _parse_price_value(self, value, fallback: float = 0.0) -> float:
+        text = str(value or "").strip()
+        if not text:
+            return fallback
+
+        normalized = text.replace(" ", "").replace("EUR", "").replace("eur", "")
+        normalized = normalized.replace(".", "").replace(",", ".")
+        match = re.search(r"-?\d+(?:\.\d+)?", normalized)
+        if not match:
+            return fallback
+        try:
+            return float(match.group(0))
+        except Exception:
+            return fallback
+
+    def _format_price_value(self, value: float) -> str:
+        return f"{float(value):.2f}".replace(".", ",")
+
+    def _sync_article_price_editor_from_group(self, group: dict | None) -> None:
+        widget = getattr(self, "article_price_spin", None)
+        if widget is None:
+            return
+
+        widget.blockSignals(True)
+        if group is None:
+            widget.setValue(0.0)
+            widget.setEnabled(False)
+            widget.blockSignals(False)
+            return
+
+        articles = self._selected_articles_for_group(group)
+        if not articles:
+            widget.setValue(0.0)
+            widget.setEnabled(False)
+            widget.blockSignals(False)
+            return
+
+        article_list_widget = getattr(self, "article_list_widget", None)
+        selected_index = article_list_widget.currentRow() if article_list_widget is not None else 0
+        if selected_index < 0 or selected_index >= len(articles):
+            selected_index = 0
+        price = self._parse_price_value(articles[selected_index].get("VK (Netto)", ""), 0.0)
+        widget.setValue(price)
+        widget.setEnabled(True)
+        widget.blockSignals(False)
+
+    def _on_article_price_changed(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        articles = self._selected_articles_for_group(group)
+        if not articles:
+            return
+
+        article_list_widget = getattr(self, "article_list_widget", None)
+        selected_index = article_list_widget.currentRow() if article_list_widget is not None else 0
+        if selected_index < 0 or selected_index >= len(articles):
+            selected_index = 0
+
+        updated_article = dict(articles[selected_index])
+        updated_article["VK (Netto)"] = self._format_price_value(self.article_price_spin.value())
+        articles[selected_index] = updated_article
+        self._set_selected_articles_for_group(group, articles)
+
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+        self._update_draft_preview()
+
     def _selected_articles_for_group(self, group: dict) -> list[dict]:
         articles = group.get("selected_articles", [])
         if isinstance(articles, list) and articles:
@@ -1031,6 +1149,7 @@ class MainWindow(QMainWindow):
         group = self._current_group_for_article_editing()
         if group is not None:
             self._update_article_summary(group)
+        self._sync_article_price_editor_from_group(group)
 
     def _refresh_article_editor_for_group(self, group: dict | None) -> None:
         if group is None:
@@ -1043,6 +1162,7 @@ class MainWindow(QMainWindow):
                 article_list_widget.clear()
                 article_list_widget.blockSignals(False)
             self._update_article_summary(None)
+            self._sync_article_price_editor_from_group(None)
             return
 
         self._sync_article_list_widget(group)
@@ -1058,6 +1178,7 @@ class MainWindow(QMainWindow):
             self.article_combo.setCurrentIndex(0)
             self.article_combo.blockSignals(False)
         self._update_article_summary(group)
+        self._sync_article_price_editor_from_group(group)
 
     def _refresh_group_view_after_article_change(self, group: dict) -> None:
         self._update_article_summary(group)
