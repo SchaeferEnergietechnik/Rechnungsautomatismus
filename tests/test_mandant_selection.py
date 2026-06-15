@@ -861,6 +861,30 @@ def test_resolve_articles_from_reference_parses_and_deduplicates(config_loader, 
             assert invalid == ["9", "x"]
 
 
+def test_article_display_text_can_include_reference_number(config_loader, contacts_importer):
+    """Test: Artikeldisplay kann die Schnellreferenz-Nummer anzeigen."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+
+            text = window._article_display_text(
+                {
+                    "Artikelnummer": "PS-1",
+                    "Bezeichnung": "PS Service",
+                    "Einheit": "Stunde",
+                    "Steuerart": "USt19",
+                    "VK (Netto)": "200,00",
+                },
+                reference_index=4,
+            )
+
+            assert text.startswith("4. PS-1 - PS Service")
+
+
 def test_apply_quick_article_reference_to_group(config_loader, contacts_importer):
     """Test: Schnellreferenz übernimmt Artikel in der angegebenen Reihenfolge."""
     from gui.main_window import MainWindow

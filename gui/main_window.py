@@ -3,7 +3,7 @@ import json
 import math
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib import parse, request, error
 
@@ -145,6 +145,7 @@ class MainWindow(QMainWindow):
         self.article_template_save_button.clicked.connect(self.save_article_template_for_group)
         self.article_template_apply_button.clicked.connect(self.apply_selected_article_template_to_group)
         self.article_quick_select_apply_button.clicked.connect(self.apply_quick_article_reference_for_group)
+        self.article_quick_select_input.returnPressed.connect(self.apply_quick_article_reference_for_group)
 
         self.article_list_widget = QListWidget()
         self.article_list_widget.setMinimumHeight(140)
@@ -902,6 +903,7 @@ class MainWindow(QMainWindow):
         group["travel_hours"] = duration_hours
         group["travel_route_origin"] = origin
         group["travel_route_destination"] = destination
+        group["travel_values_source"] = "auto_single"
 
         if show_messages:
             QMessageBox.information(
@@ -929,6 +931,62 @@ class MainWindow(QMainWindow):
             return str(group.get("datum", "") or "").strip()
         return parsed.date().isoformat()
 
+    def _tour_employee_key(self, group: dict) -> str:
+        employees = group.get("mitarbeiter_liste", [])
+        if isinstance(employees, list) and employees:
+            normalized = sorted(
+                str(employee or "").strip().lower()
+                for employee in employees
+                if str(employee or "").strip()
+            )
+            if normalized:
+                return "|".join(normalized)
+
+        return str(group.get("mitarbeiter", "") or "").strip().lower()
+
+    def _split_groups_into_consecutive_day_clusters(self, groups: list[dict], order_map: dict[int, int]) -> list[list[dict]]:
+        if not groups:
+            return []
+
+        ordered_groups = sorted(
+            groups,
+            key=lambda group: (
+                self._parse_date(str(group.get("datum", "") or "")),
+                order_map.get(id(group), 999999),
+                str(group.get("projekt_roh", "") or "").strip().lower(),
+            ),
+        )
+
+        clusters: list[list[dict]] = []
+        current_cluster: list[dict] = []
+        last_date = None
+
+        for group in ordered_groups:
+            parsed = self._parse_date(str(group.get("datum", "") or ""))
+            current_date = None if parsed == datetime.max else parsed.date()
+
+            if not current_cluster:
+                current_cluster = [group]
+                last_date = current_date
+                continue
+
+            if current_date is None or last_date is None:
+                same_cluster = str(group.get("datum", "") or "").strip() == str(current_cluster[-1].get("datum", "") or "").strip()
+            else:
+                same_cluster = current_date <= (last_date + timedelta(days=1))
+
+            if same_cluster:
+                current_cluster.append(group)
+            else:
+                clusters.append(current_cluster)
+                current_cluster = [group]
+
+            last_date = current_date
+
+        if current_cluster:
+            clusters.append(current_cluster)
+        return clusters
+
     def _apply_roundtrip_distribution_for_groups(self, groups: list[dict]) -> int:
         """Verteilt Fahrten bei gleichem Kundentag auf mehrere Projektgruppen.
 
@@ -943,40 +1001,44 @@ class MainWindow(QMainWindow):
 
         for group in groups:
             mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
-            tour_key = (mandant_id, self._tour_day_key(group), self._tour_customer_key(group))
+            tour_key = (mandant_id, self._tour_customer_key(group), self._tour_employee_key(group))
             groups_by_tour_key.setdefault(tour_key, []).append(group)
 
         applied_tours = 0
-        for (mandant_id, _day_key, _customer_key), cluster in groups_by_tour_key.items():
-            if len(cluster) < 2:
-                continue
+        for (mandant_id, _customer_key, _employee_key), raw_cluster in groups_by_tour_key.items():
+            for cluster in self._split_groups_into_consecutive_day_clusters(raw_cluster, order_map):
+                if len(cluster) < 2:
+                    continue
 
-            distinct_projects = {
-                str(group.get("projekt_roh", "") or "").strip().lower()
-                for group in cluster
-                if str(group.get("projekt_roh", "") or "").strip()
-            }
-            if len(distinct_projects) < 2:
-                continue
+                distinct_projects = {
+                    str(group.get("projekt_roh", "") or "").strip().lower()
+                    for group in cluster
+                    if str(group.get("projekt_roh", "") or "").strip()
+                }
+                if len(distinct_projects) < 2:
+                    continue
 
-            # Manuelle Werte sollen nicht stillschweigend ueberschrieben werden.
-            if any(
-                float(group.get("travel_km", 0.0) or 0.0) > 0.0 or float(group.get("travel_hours", 0.0) or 0.0) > 0.0
-                for group in cluster
-            ):
-                continue
+                if any(
+                    str(group.get("travel_values_source", "") or "").strip().lower() == "manual"
+                    and (
+                        float(group.get("travel_km", 0.0) or 0.0) > 0.0
+                        or float(group.get("travel_hours", 0.0) or 0.0) > 0.0
+                    )
+                    for group in cluster
+                ):
+                    continue
 
-            ordered_cluster = sorted(
-                cluster,
-                key=lambda group: (
-                    self._parse_date(str(group.get("datum", "") or "")),
-                    order_map.get(id(group), 999999),
-                    str(group.get("projekt_roh", "") or "").strip().lower(),
-                ),
-            )
+                ordered_cluster = sorted(
+                    cluster,
+                    key=lambda group: (
+                        self._parse_date(str(group.get("datum", "") or "")),
+                        order_map.get(id(group), 999999),
+                        str(group.get("projekt_roh", "") or "").strip().lower(),
+                    ),
+                )
 
-            if self._apply_roundtrip_distribution_for_ordered_groups(ordered_cluster, mandant_id):
-                applied_tours += 1
+                if self._apply_roundtrip_distribution_for_ordered_groups(ordered_cluster, mandant_id):
+                    applied_tours += 1
 
         return applied_tours
 
@@ -1095,6 +1157,7 @@ class MainWindow(QMainWindow):
             group["travel_hours"] = round(float(total_hours), 2)
             group["travel_route_origin"] = str(segments[0].get("from", "") or origin)
             group["travel_route_destination"] = str(segments[-1].get("to", "") or destination)
+            group["travel_values_source"] = "auto_roundtrip"
             group["travel_route_segments"] = [
                 f"{str(seg.get('from', '') or '-')} -> {str(seg.get('to', '') or '-')}"
                 for seg in segments
@@ -1156,7 +1219,7 @@ class MainWindow(QMainWindow):
         price = str((article or {}).get("VK (Netto)", "") or "").strip().lower()
         return "|".join([name, unit, tax, price])
 
-    def _article_display_text(self, article: dict) -> str:
+    def _article_display_text(self, article: dict, reference_index: int | None = None) -> str:
         article_number = str((article or {}).get("Artikelnummer", "") or "").strip()
         name = str((article or {}).get("Bezeichnung", "") or "").strip() or "Unbenannter Artikel"
         unit = str((article or {}).get("Einheit", "") or "").strip()
@@ -1169,7 +1232,10 @@ class MainWindow(QMainWindow):
         suffix_parts = [part for part in [unit, tax, price] if part]
         if suffix_parts:
             parts.append(f"({', '.join(suffix_parts)})")
-        return " - ".join(parts)
+        base_text = " - ".join(parts)
+        if reference_index is not None and reference_index > 0:
+            return f"{reference_index}. {base_text}"
+        return base_text
 
     def _parse_price_value(self, value, fallback: float = 0.0) -> float:
         text = str(value or "").strip()
@@ -1589,8 +1655,8 @@ class MainWindow(QMainWindow):
         article_combo.clear()
         article_combo.addItem("Kein Artikel gewählt", "")
 
-        for article in self.current_articles:
-            article_combo.addItem(self._article_display_text(article), self._article_key(article))
+        for index, article in enumerate(self.current_articles, start=1):
+            article_combo.addItem(self._article_display_text(article, reference_index=index), self._article_key(article))
 
         index = article_combo.findData(current_selected_key)
         if index >= 0:
@@ -2566,6 +2632,7 @@ class MainWindow(QMainWindow):
             group["travel_km"] = float(travel_km.value())
             group["travel_hour_rate"] = float(travel_hour_rate.value())
             group["travel_km_rate"] = float(travel_km_rate.value())
+            group["travel_values_source"] = "manual"
             self._sync_travel_editor_from_group(group)
             self._mark_changed([group])
             self._save_manual_data()
@@ -2588,6 +2655,7 @@ class MainWindow(QMainWindow):
         group.setdefault("travel_km", 0.0)
         group.setdefault("travel_hour_rate", 150.0)
         group.setdefault("travel_km_rate", 0.7)
+        group.setdefault("travel_values_source", "")
 
     def _travel_amount_for_group(self, group: dict) -> float:
         self._ensure_travel_fields_for_group(group)
@@ -2634,6 +2702,7 @@ class MainWindow(QMainWindow):
         group["travel_km"] = float(self.travel_km_spin.value())
         group["travel_hour_rate"] = float(self.travel_hour_rate_spin.value())
         group["travel_km_rate"] = float(self.travel_km_rate_spin.value())
+        group["travel_values_source"] = "manual"
 
     def _on_travel_settings_changed(self) -> None:
         group = self._current_group_for_article_editing()
@@ -2829,6 +2898,7 @@ class MainWindow(QMainWindow):
             "travel_mode": group.get("travel_mode", ""),
             "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
             "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
+            "travel_values_source": group.get("travel_values_source", ""),
             "travel_hours": group.get("travel_hours", 0.0),
             "travel_km": group.get("travel_km", 0.0),
             "travel_hour_rate": group.get("travel_hour_rate", 150.0),
@@ -2856,6 +2926,7 @@ class MainWindow(QMainWindow):
                 group["travel_mode"] = state_map[key].get("travel_mode", self._default_travel_mode_for_group(group))
                 group["travel_forward_assignment_rule"] = state_map[key].get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
                 group["multi_day_allowance_assignment_rule"] = state_map[key].get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
+                group["travel_values_source"] = state_map[key].get("travel_values_source", "")
                 group["travel_hours"] = float(state_map[key].get("travel_hours", 0.0) or 0.0)
                 group["travel_km"] = float(state_map[key].get("travel_km", 0.0) or 0.0)
                 group["travel_hour_rate"] = float(state_map[key].get("travel_hour_rate", 150.0) or 150.0)
@@ -3204,6 +3275,7 @@ class MainWindow(QMainWindow):
                 "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
                 "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
                 "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
+                "travel_values_source": group.get("travel_values_source", ""),
                 "travel_hours": group.get("travel_hours", 0.0),
                 "travel_km": group.get("travel_km", 0.0),
                 "travel_hour_rate": group.get("travel_hour_rate", 150.0),
@@ -3253,6 +3325,7 @@ class MainWindow(QMainWindow):
                 "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
                 "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
                 "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
+                "travel_values_source": group.get("travel_values_source", ""),
                 "travel_hours": group.get("travel_hours", 0.0),
                 "travel_km": group.get("travel_km", 0.0),
                 "travel_hour_rate": group.get("travel_hour_rate", 150.0),
@@ -3326,6 +3399,7 @@ class MainWindow(QMainWindow):
                     group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
                     group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
                     group["multi_day_allowance_assignment_rule"] = entry.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
+                    group["travel_values_source"] = entry.get("travel_values_source", "")
                     group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
                     group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
                     group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
@@ -3397,6 +3471,7 @@ class MainWindow(QMainWindow):
                     group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
                     group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
                     group["multi_day_allowance_assignment_rule"] = entry.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
+                    group["travel_values_source"] = entry.get("travel_values_source", "")
                     group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
                     group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
                     group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
@@ -4039,6 +4114,7 @@ class MainWindow(QMainWindow):
             f"Fahrtkilometer: {int(round(float(group.get('travel_km', 0.0) or 0.0)))}",
             f"Routen-Start: {group.get('travel_route_origin', self._mandant_full_address(self.active_mandant_id))}",
             f"Routen-Ziel: {group.get('travel_route_destination', group.get('adresse_roh', ''))}",
+            f"Rundtour-Rolle: {group.get('travel_segment_role', '')}",
             f"Fahrtstundensatz: {group.get('travel_hour_rate', 150.0)} EUR",
             f"Fahrt-KM-Satz: {group.get('travel_km_rate', 0.7)} EUR",
             f"Fahrtkosten gesamt: {self._travel_amount_for_group(group)} EUR",
@@ -4066,8 +4142,21 @@ class MainWindow(QMainWindow):
             f"RE: {', '.join(group.get('re_roh_liste', []))}",
             f"Geändert: {group.get('_last_changed_at', '')}",
             "",
-            "Validierungsmeldungen:",
+            "Rundtour-Segmente:",
         ]
+
+        route_segments = group.get("travel_route_segments", [])
+        if isinstance(route_segments, list) and route_segments:
+            for segment in route_segments:
+                detail_lines.append(f"- {segment}")
+        else:
+            segment_preview = self._travel_segment_preview_text(group)
+            detail_lines.append(f"- {segment_preview}" if segment_preview else "- Keine")
+
+        detail_lines.extend([
+            "",
+            "Validierungsmeldungen:",
+        ])
 
         validation_messages = group.get("invoice_validation_messages", [])
         if validation_messages:
@@ -4201,6 +4290,7 @@ class MainWindow(QMainWindow):
             travel_mode = group.get("travel_mode", self._default_travel_mode_for_group(group))
             travel_forward_assignment_rule = group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
             multi_day_allowance_assignment_rule = group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
+            travel_values_source = group.get("travel_values_source", "")
             travel_hours = float(group.get("travel_hours", 0.0) or 0.0)
             travel_km = float(group.get("travel_km", 0.0) or 0.0)
             travel_hour_rate = float(group.get("travel_hour_rate", 150.0) or 150.0)
@@ -4219,6 +4309,7 @@ class MainWindow(QMainWindow):
                     "travel_mode": travel_mode,
                     "travel_forward_assignment_rule": travel_forward_assignment_rule,
                     "multi_day_allowance_assignment_rule": multi_day_allowance_assignment_rule,
+                    "travel_values_source": travel_values_source,
                     "travel_hours": travel_hours,
                     "travel_km": travel_km,
                     "travel_hour_rate": travel_hour_rate,
@@ -4277,6 +4368,7 @@ class MainWindow(QMainWindow):
                 group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
                 group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
                 group["multi_day_allowance_assignment_rule"] = entry.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
+                group["travel_values_source"] = entry.get("travel_values_source", "")
                 group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
                 group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
                 group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
