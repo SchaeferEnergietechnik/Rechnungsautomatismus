@@ -70,3 +70,18 @@ def test_calculate_travel_km_for_group_uses_round_trip_values():
     assert ok is True
     assert group["travel_km"] == 220.0
     assert group["travel_hours"] == 2.5
+
+
+def test_calculate_travel_km_for_group_requires_route_duration():
+    window = _window_without_init()
+    window.active_mandant_id = "ges_power_service"
+    window._mandant_full_address = lambda _mandant_id: "Ferchlipp 16, 39615 Altmärkische Wische"
+    window._geocode_address = lambda _address: (50.0, 11.0)
+    window._route_metrics = lambda _start, _end: (110.0, 0.0)
+
+    group = {"adresse_roh": "Musterstr. 1, 12345 Beispielstadt"}
+    ok = window._calculate_travel_km_for_group(group, show_messages=False)
+
+    assert ok is False
+    assert "travel_km" not in group
+    assert "travel_hours" not in group

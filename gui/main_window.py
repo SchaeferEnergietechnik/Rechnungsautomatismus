@@ -805,13 +805,6 @@ class MainWindow(QMainWindow):
         except (error.URLError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             return None
 
-    def _estimate_travel_hours_from_km(self, distance_km: float) -> float:
-        # Fallback mit konservativem Mischwert für Landstraße/Ortsdurchfahrten.
-        average_speed_kmh = 70.0
-        if distance_km <= 0:
-            return 0.0
-        return self._round_up_to_quarter_hour(distance_km / average_speed_kmh)
-
     def _round_up_to_quarter_hour(self, hours: float) -> float:
         value = float(hours or 0.0)
         if value <= 0:
@@ -869,7 +862,17 @@ class MainWindow(QMainWindow):
         duration_hours = self._round_up_to_quarter_hour(duration_hours * 2.0)
 
         if duration_hours <= 0:
-            duration_hours = self._estimate_travel_hours_from_km(distance_km)
+            if show_messages:
+                QMessageBox.warning(
+                    self,
+                    "KM-Berechnung",
+                    "Route konnte ohne verlässliche Fahrzeit nicht übernommen werden. "
+                    "Bitte Fahrtzeit manuell setzen oder Route erneut berechnen.",
+                )
+            return False
+
+        if distance_km <= 0:
+            return False
 
         group["travel_km"] = distance_km
         group["travel_hours"] = duration_hours
