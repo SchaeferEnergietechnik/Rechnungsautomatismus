@@ -5,7 +5,7 @@ Stand: 2026-06-15
 Letztes Update: 2026-06-15
 
 Kurzstatistik:
-- Teststand: 88/88 Tests gruen (`pytest -q`)
+- Teststand: 103/103 Tests gruen (`pytest -q`)
 - Kundenadresse im Export aus Kundenmatch statt Projektadresse
 - Fahrtkostenberechnung als Hin- und Rueckfahrt
 - GUI zeigt Validierungsstatus in der Tabelle
@@ -16,6 +16,11 @@ Kurzstatistik:
 - Rundreisen fuer Kundentag mit mehreren Projekten werden segmentweise verteilt
 - Kundenspezifische Artikelsatz-Vorlagen vorhanden (speichern/anwenden)
 - Schnellreferenz fuer Artikelauswahl vorhanden (z. B. `1,4,7`)
+- RE-Filter vorhanden (Alle RE / Nur ohne RE-x / Nur mit RE-x)
+- Exportsteuerung vorhanden:
+  - Belegtyp Angebot/Rechnung
+  - Exportziel Draft/Finalisieren
+- Standard-Belegtitel wird je Gruppe automatisch als `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>` erzeugt
 - Regeloptionen im Angebots-/Rechnungsdialog vorhanden:
   - Weiterfahrt-Zuordnung (Tag 1 / Tag 2)
   - Mehrtagespauschale-Zuordnung (Tag 1 / Tag 2)
@@ -82,16 +87,19 @@ Enthält Buttons für:
 - CSV exportieren
 - JSON exportieren
 - Angebot/Rechnung bearbeiten (separates Dialogfenster)
-- Lexware Draft exportieren
+- Lexware exportieren
 
 Enthält zusätzlich:
 - Mandantenauswahl (Dropdown, geladen aus `config/mandants.json`)
+- Belegtyp-Auswahl (Angebot/Rechnung)
+- Exportziel-Auswahl (Draft/Finalisieren)
 
 ## 4.2 Filterbereich
 Enthält:
 - Filter für Automatikstatus
 - Filter für manuellen Status
 - Filter für geändert / ungeändert
+- Filter für RE-x (mit/ohne erledigt-Markierung)
 - Buttons:
   - nur offene anzeigen
   - alle manuellen Status anzeigen

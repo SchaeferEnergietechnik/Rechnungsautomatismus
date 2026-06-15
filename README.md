@@ -38,7 +38,14 @@ Aktueller Funktionsstand:
 - Kundenspezifische Artikelsatz-Vorlagen sind verfuegbar (speichern/anwenden, persistiert in Projekt/Sitzung/Statusdatei).
 - Schnellreferenz fuer Artikelauswahl ist aktiv (z. B. `1,4,7` mit Validierung und Duplikat-Schutz).
 - Wahlregeln fuer Weiterfahrt und Mehrtagespauschale (Tag 1 / Tag 2) sind im Dialog konfigurierbar und wirksam.
-- Teststand: 88/88 Tests gruen (`pytest -q`).
+- RE-Filter ist in der GUI aktiv (`Alle RE`, `Nur ohne RE-x`, `Nur mit RE-x`).
+- Exportsteuerung ist pro Lauf verfuegbar:
+	- Belegtyp `Angebot`/`Rechnung`
+	- Exportziel `Draft`/`Finalisieren`
+- Standard-Belegtitel ist je Gruppe dynamisch:
+	- `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
+	- Auto-Titel werden pro Gruppe neu berechnet (kein Carry-over auf Folgerechnungen)
+- Teststand: 103/103 Tests gruen (`pytest -q`).
 
 Update 2026-06-15:
 - Stand aus `feature/mandant-specific-data` ist nach `main` gemerged.

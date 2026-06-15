@@ -2,7 +2,23 @@
 ## Rechnungstool – aktueller Ist-Stand
 
 Stand: 2026-06-15
-Aktueller Teststand: 88/88 Tests gruen (`pytest -q`)
+Aktueller Teststand: 103/103 Tests gruen (`pytest -q`)
+
+## Update 2026-06-15 (Exportsteuerung + Titelfix)
+
+- Exportfluss in der GUI erweitert:
+  - Belegtyp je Exportlauf auswählbar (`Angebot`/`Rechnung`)
+  - Exportziel auswählbar (`Draft`/`Finalisieren`)
+- Lexware-Exportservice unterstützt jetzt endpoint-gesteuert:
+  - Quotations (`/v1/quotations`)
+  - Invoices (`/v1/invoices`)
+  - Finalisierung über Query `?finalize=true`
+- Tabellenfilter erweitert:
+  - RE-Filter für erledigt-Markierung `x` (mit/ohne)
+- Standardtitel korrigiert:
+  - Titel wird pro Gruppe dynamisch gebildet als `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
+  - verhindert fälschliche Übernahme des ersten Gruppentitels auf weitere Gruppen
+- Beschreibungstext enthält keine Mitarbeiternamen mehr.
 ## Update 2026-06-15 (umgesetzt)
 
 - `feature/mandant-specific-data` ist in `main` gemerged.
