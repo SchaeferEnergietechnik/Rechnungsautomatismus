@@ -433,6 +433,243 @@ def test_lexware_export_blocks_groups_with_validation_errors(config_loader, cont
             window.lexware_export_service.is_configured.assert_not_called()
 
 
+def test_lexware_export_with_warnings_requires_confirmation(config_loader, contacts_importer):
+    """Test: Export mit Warnungen erfordert explizite Bestätigung."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window._configure_lexware_service_for_mandant = Mock()
+            window._selected_groups = Mock(return_value=[
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 2,
+                }
+            ])
+
+            with patch('gui.main_window.QMessageBox.question', return_value=65536):
+                window.export_selected_groups_to_lexware_draft()
+
+            window.lexware_export_service.is_configured.assert_not_called()
+
+
+def test_lexware_export_summary_includes_warning_count(config_loader, contacts_importer):
+    """Test: Erfolgszusammenfassung enthält Anzahl exportierter Gruppen mit Warnungen."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 1,
+                    "travel_km": 10.0,
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window._configure_lexware_service_for_mandant = Mock()
+            window._get_lexware_company_id_for_mandant = Mock(return_value="company-power-service")
+            window.draft_title_edit = Mock(text=Mock(return_value="Sonderangebot"))
+            window.draft_introduction_edit = Mock(toPlainText=Mock(return_value="Individuelle Einleitung"))
+            window.draft_remark_edit = Mock(toPlainText=Mock(return_value="Individuelle Nachbemerkung"))
+            window.draft_payment_term_days_spin = Mock(value=Mock(return_value=30))
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch('gui.main_window.QMessageBox.question', side_effect=[16384, 16384]):
+                with patch('gui.main_window.QMessageBox.information') as info_mock:
+                    window.export_selected_groups_to_lexware_draft()
+
+            info_mock.assert_called_once()
+            info_text = info_mock.call_args.args[2]
+            assert "Mit Warnungen (exportiert): 1" in info_text
+            assert "Neu erstellt: 1" in info_text
+
+
+def test_lexware_export_with_missing_geocoding_requires_confirmation(config_loader, contacts_importer):
+    """Test: Export mit fehlender Geokodierung erfordert explizite Bestätigung."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "adresse_roh": "Unbekannte Adresse 1",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 0,
+                    "travel_km": 0.0,
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window._configure_lexware_service_for_mandant = Mock()
+            window._calculate_travel_km_for_group = Mock(return_value=False)
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+
+            with patch('gui.main_window.QMessageBox.question', return_value=65536):
+                window.export_selected_groups_to_lexware_draft()
+
+            window.lexware_export_service.is_configured.assert_called_once()
+            window.lexware_export_service.export_group_as_draft.assert_not_called()
+
+
+def test_export_confirmation_shows_lexware_account_context(config_loader, contacts_importer):
+    """Test: Export-Bestätigung zeigt den aktiven Lexware-Account-Kontext an."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 0,
+                    "travel_km": 10.0,
+                    "lexware_export_status": "",
+                    "mandant_id": "ges_power_service",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window.draft_title_edit = Mock(text=Mock(return_value="Sonderangebot"))
+            window.draft_introduction_edit = Mock(toPlainText=Mock(return_value="Individuelle Einleitung"))
+            window.draft_remark_edit = Mock(toPlainText=Mock(return_value="Individuelle Nachbemerkung"))
+            window.draft_payment_term_days_spin = Mock(value=Mock(return_value=30))
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.base_url = "https://api.lexware.test"
+            window.lexware_export_service.draft_endpoint = "/v1/quotations"
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch.object(MainWindow, '_configure_lexware_service_for_mandant', lambda self, _mandant_id: None):
+                with patch.object(MainWindow, '_get_lexware_company_id_for_mandant', return_value="company-power-service"):
+                    with patch('gui.main_window.QMessageBox.question', return_value=65536) as question_mock:
+                        window.export_selected_groups_to_lexware_draft()
+
+            confirm_text = question_mock.call_args.args[2]
+            assert "Lexware Konto-Kontext" in confirm_text
+            assert "G.E.S. Power Service GmbH" in confirm_text
+            assert "company-power-service" in confirm_text
+            assert "https://api.lexware.test" in confirm_text
+
+
+def test_export_confirmation_shows_route_segment_per_invoice(config_loader, contacts_importer):
+    """Test: Export-Bestätigung zeigt Segmentdetails (Start/Ziel/km/h) je Rechnung."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 0,
+                    "travel_km": 35.0,
+                    "travel_hours": 0.75,
+                    "travel_segment_role": "first_invoice_outbound",
+                    "travel_route_origin": "Firma Musterweg 1",
+                    "travel_route_destination": "Projektadresse 7",
+                    "lexware_export_status": "",
+                    "mandant_id": "ges_power_service",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window.draft_title_edit = Mock(text=Mock(return_value="Sonderangebot"))
+            window.draft_introduction_edit = Mock(toPlainText=Mock(return_value="Individuelle Einleitung"))
+            window.draft_remark_edit = Mock(toPlainText=Mock(return_value="Individuelle Nachbemerkung"))
+            window.draft_payment_term_days_spin = Mock(value=Mock(return_value=30))
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.base_url = "https://api.lexware.test"
+            window.lexware_export_service.draft_endpoint = "/v1/quotations"
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch.object(MainWindow, '_configure_lexware_service_for_mandant', lambda self, _mandant_id: None):
+                with patch.object(MainWindow, '_get_lexware_company_id_for_mandant', return_value="company-power-service"):
+                    with patch('gui.main_window.QMessageBox.question', return_value=65536) as question_mock:
+                        window.export_selected_groups_to_lexware_draft()
+
+            confirm_text = question_mock.call_args.args[2]
+            assert "Erste Rechnung (Anfahrt):" in confirm_text
+            assert "Route: Firma Musterweg 1 -> Projektadresse 7" in confirm_text
+            assert "35 km" in confirm_text
+            assert "0.75 h" in confirm_text
+
+
 def test_draft_settings_survive_project_roundtrip(config_loader, contacts_importer, tmp_path):
     """Test: Draft-Felder werden mit Projektdatei gespeichert und geladen."""
     from gui.main_window import MainWindow
@@ -476,6 +713,24 @@ def test_draft_settings_survive_project_roundtrip(config_loader, contacts_import
             window.draft_introduction_edit = introduction_widget
             window.draft_remark_edit = remark_widget
             window.draft_payment_term_days_spin = payment_widget
+            window.customer_article_templates = {
+                "ges_power_service": [
+                    {
+                        "name": "Standard Projekt X",
+                        "customer_key": "nr:2002",
+                        "customer_label": "PowerCorp (Nr. 2002)",
+                        "articles": [
+                            {
+                                "Artikelnummer": "PS-1",
+                                "Bezeichnung": "PS Service",
+                                "Einheit": "Stunde",
+                                "Steuerart": "USt19",
+                                "VK (Netto)": "200,00",
+                            }
+                        ],
+                    }
+                ]
+            }
             window._log_action = Mock()
             window._build_group_key = Mock(return_value="group-key")
 
@@ -487,6 +742,9 @@ def test_draft_settings_survive_project_roundtrip(config_loader, contacts_import
             assert saved["draft_settings"]["introduction"] == "Individuelle Einleitung"
             assert saved["draft_settings"]["remark"] == "Individuelle Nachbemerkung"
             assert saved["draft_settings"]["payment_term_days"] == 30
+            assert "customer_article_templates" in saved
+            assert "ges_power_service" in saved["customer_article_templates"]
+            assert saved["customer_article_templates"]["ges_power_service"][0]["name"] == "Standard Projekt X"
 
             title_widget.text.return_value = "Geaendert"
             introduction_widget.toPlainText.return_value = "Geaendert"
@@ -499,6 +757,7 @@ def test_draft_settings_survive_project_roundtrip(config_loader, contacts_import
 
             window.load_file = Mock()
             window.refresh_table = Mock()
+            window._refresh_article_template_combo_for_group = Mock()
             window.groups = [
                 {
                     "datum": "07.04.2026",
@@ -514,6 +773,282 @@ def test_draft_settings_survive_project_roundtrip(config_loader, contacts_import
             assert introduction_widget.setPlainText.call_args_list[-1].args[0] == "Individuelle Einleitung"
             assert remark_widget.setPlainText.call_args_list[-1].args[0] == "Individuelle Nachbemerkung"
             assert payment_widget.setValue.call_args_list[-1].args[0] == 30
+            assert window.customer_article_templates["ges_power_service"][0]["name"] == "Standard Projekt X"
+
+
+def test_apply_customer_article_template_to_group(config_loader, contacts_importer):
+    """Test: Kundenspezifische Artikelsatz-Vorlage wird auf die aktuelle Gruppe angewendet."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.customer_article_templates = {
+                "ges_power_service": [
+                    {
+                        "name": "Power Standard",
+                        "customer_key": "nr:2002",
+                        "customer_label": "PowerCorp (Nr. 2002)",
+                        "articles": [
+                            {
+                                "Artikelnummer": "PS-1",
+                                "Bezeichnung": "PS Service",
+                                "Einheit": "Stunde",
+                                "Steuerart": "USt19",
+                                "VK (Netto)": "200,00",
+                            },
+                            {
+                                "Artikelnummer": "PS-2",
+                                "Bezeichnung": "Zusatzleistung",
+                                "Einheit": "Stk",
+                                "Steuerart": "USt19",
+                                "VK (Netto)": "50,00",
+                            },
+                        ],
+                    }
+                ]
+            }
+
+            group = {
+                "kunde_roh": "PowerCorp",
+                "customer_match_number": "2002",
+                "selected_articles": [],
+            }
+
+            template_combo = Mock()
+            template_combo.currentData = Mock(return_value=0)
+            window.article_template_combo = template_combo
+
+            window._current_group_for_article_editing = Mock(return_value=group)
+            window._set_selected_articles_for_group = Mock()
+            window._mark_changed = Mock()
+            window._save_manual_data = Mock()
+            window._refresh_article_editor_for_group = Mock()
+            window._refresh_group_view_after_article_change = Mock()
+            window._log_action = Mock()
+
+            window.apply_selected_article_template_to_group()
+
+            window._set_selected_articles_for_group.assert_called_once()
+            applied_articles = window._set_selected_articles_for_group.call_args.args[1]
+            assert len(applied_articles) == 2
+            assert applied_articles[0]["Artikelnummer"] == "PS-1"
+            assert applied_articles[1]["Artikelnummer"] == "PS-2"
+
+
+def test_resolve_articles_from_reference_parses_and_deduplicates(config_loader, contacts_importer):
+    """Test: Schnellreferenz löst gültige Indizes auf und ignoriert Duplikate."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "A"},
+                {"Artikelnummer": "PS-2", "Bezeichnung": "B"},
+                {"Artikelnummer": "PS-3", "Bezeichnung": "C"},
+            ]
+
+            resolved, invalid = window._resolve_articles_from_reference("1, 3, 3, 9, x")
+
+            assert [item["Artikelnummer"] for item in resolved] == ["PS-1", "PS-3"]
+            assert invalid == ["9", "x"]
+
+
+def test_article_display_text_can_include_reference_number(config_loader, contacts_importer):
+    """Test: Artikeldisplay kann die Schnellreferenz-Nummer anzeigen."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+
+            text = window._article_display_text(
+                {
+                    "Artikelnummer": "PS-1",
+                    "Bezeichnung": "PS Service",
+                    "Einheit": "Stunde",
+                    "Steuerart": "USt19",
+                    "VK (Netto)": "200,00",
+                },
+                reference_index=4,
+            )
+
+            assert text.startswith("4. PS-1 - PS Service")
+
+
+def test_apply_quick_article_reference_to_group(config_loader, contacts_importer):
+    """Test: Schnellreferenz übernimmt Artikel in der angegebenen Reihenfolge."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "A"},
+                {"Artikelnummer": "PS-2", "Bezeichnung": "B"},
+                {"Artikelnummer": "PS-3", "Bezeichnung": "C"},
+            ]
+
+            group = {"kunde_roh": "PowerCorp", "customer_match_number": "2002", "selected_articles": []}
+            input_widget = Mock()
+            input_widget.text = Mock(return_value="2,1")
+            window.article_quick_select_input = input_widget
+
+            window._current_group_for_article_editing = Mock(return_value=group)
+            window._set_selected_articles_for_group = Mock()
+            window._mark_changed = Mock()
+            window._save_manual_data = Mock()
+            window._refresh_article_editor_for_group = Mock()
+            window._refresh_group_view_after_article_change = Mock()
+            window._log_action = Mock()
+
+            window.apply_quick_article_reference_for_group()
+
+            window._set_selected_articles_for_group.assert_called_once()
+            applied_articles = window._set_selected_articles_for_group.call_args.args[1]
+            assert [item["Artikelnummer"] for item in applied_articles] == ["PS-2", "PS-1"]
+
+
+def test_apply_quick_article_reference_without_valid_entries_shows_warning(config_loader, contacts_importer):
+    """Test: Ungültige Schnellreferenz zeigt Warnung und ändert keine Artikel."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "A"},
+            ]
+
+            group = {"kunde_roh": "PowerCorp", "selected_articles": []}
+            input_widget = Mock()
+            input_widget.text = Mock(return_value="9,foo")
+            window.article_quick_select_input = input_widget
+
+            window._current_group_for_article_editing = Mock(return_value=group)
+            window._set_selected_articles_for_group = Mock()
+            window._mark_changed = Mock()
+            window._save_manual_data = Mock()
+            window._refresh_article_editor_for_group = Mock()
+            window._refresh_group_view_after_article_change = Mock()
+            window._log_action = Mock()
+
+            with patch('gui.main_window.QMessageBox.warning') as warning_mock:
+                window.apply_quick_article_reference_for_group()
+
+            warning_mock.assert_called_once()
+            window._set_selected_articles_for_group.assert_not_called()
+
+
+def test_apply_quick_article_reference_to_multiple_selected_groups(config_loader, contacts_importer):
+    """Test: Schnellreferenz wird bei Mehrfachauswahl auf alle selektierten Gruppen angewendet."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "A"},
+                {"Artikelnummer": "PS-2", "Bezeichnung": "B"},
+                {"Artikelnummer": "PS-3", "Bezeichnung": "C"},
+            ]
+
+            group_a = {"kunde_roh": "PowerCorp", "selected_articles": []}
+            group_b = {"kunde_roh": "PowerCorp", "selected_articles": []}
+            window.visible_groups = [group_a, group_b]
+            window._selected_rows = Mock(return_value=[0, 1])
+
+            input_widget = Mock()
+            input_widget.text = Mock(return_value="3,1")
+            window.article_quick_select_input = input_widget
+
+            window._set_selected_articles_for_group = Mock()
+            window._mark_changed = Mock()
+            window._save_manual_data = Mock()
+            window._refresh_group_invoice_proposal = Mock()
+            window._refresh_article_editor_for_group = Mock()
+            window.refresh_table = Mock()
+            window._select_groups_by_keys = Mock()
+            window._build_group_key = Mock(side_effect=["a", "b"])
+            window._log_action = Mock()
+
+            window.apply_quick_article_reference_for_group()
+
+            assert window._set_selected_articles_for_group.call_count == 2
+            first_args = window._set_selected_articles_for_group.call_args_list[0].args
+            second_args = window._set_selected_articles_for_group.call_args_list[1].args
+            assert first_args[0] is group_a
+            assert second_args[0] is group_b
+            assert [item["Artikelnummer"] for item in first_args[1]] == ["PS-3", "PS-1"]
+            assert [item["Artikelnummer"] for item in second_args[1]] == ["PS-3", "PS-1"]
+
+
+def test_customer_defaults_apply_travel_mode_and_article_references(config_loader, contacts_importer):
+    """Test: Kundenvorgaben setzen Fahrtkostenmodus und Standardartikel, wenn noch nichts gesetzt ist."""
+    from gui.main_window import MainWindow
+
+    config_loader.load_json = Mock(return_value={
+        "mandants": [
+            {
+                "id": "ges_power_service",
+                "display_name": "G.E.S. Power Service GmbH",
+                "contacts_csv": "data/ges_power_service/contacts.csv",
+                "products_csv": "data/ges_power_service/produkte_services.csv",
+                "customer_defaults": [
+                    {
+                        "match": {"customer_name_contains": "faber e-tec"},
+                        "travel_mode": "included_in_first_article",
+                        "article_references": "2,1",
+                    }
+                ],
+            }
+        ]
+    })
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "Artikel 1"},
+                {"Artikelnummer": "PS-2", "Bezeichnung": "Artikel 2"},
+            ]
+
+            group = {
+                "mandant_id": "ges_power_service",
+                "kunde_roh": "Faber E-Tec GmbH",
+                "customer_match_name": "Faber E-Tec GmbH",
+                "selected_articles": [],
+                "selected_article": {},
+                "travel_mode": "extra_article",
+                "travel_values_source": "",
+            }
+
+            changed = window._apply_customer_defaults_for_group(group)
+
+            assert changed is True
+            assert group["travel_mode"] == "included_in_first_article"
+            assert [item["Artikelnummer"] for item in group["selected_articles"]] == ["PS-2", "PS-1"]
 
 
 def test_mandant_defaults_fill_draft_fields(config_loader, contacts_importer):
@@ -618,6 +1153,76 @@ def test_draft_preview_shows_positions(config_loader, contacts_importer):
             assert "Einheit: Stunde | Netto: 200,00 | Steuer: USt19" in text
             assert "PS-2 - Zusatzleistung" in text
             assert "Einheit: Stk | Netto: 50,00 | Steuer: USt19" in text
+
+
+def test_has_re_done_marker_detects_x(config_loader, contacts_importer):
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+
+            assert window._has_re_done_marker({"re_roh_liste": ["", "x"]}) is True
+            assert window._has_re_done_marker({"re_roh_liste": ["X"]}) is True
+            assert window._has_re_done_marker({"re_roh_liste": ["re-1", ""]}) is False
+            assert window._has_re_done_marker({"re_roh_liste": "x, re-2"}) is True
+
+
+def test_lexware_export_passes_voucher_type_and_export_target(config_loader, contacts_importer):
+    """Test: GUI-Export übergibt Belegtyp und Finalize-Flag an den Lexware-Service."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 0,
+                    "travel_km": 10.0,
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window._configure_lexware_service_for_mandant = Mock()
+            window._get_lexware_company_id_for_mandant = Mock(return_value="company-power-service")
+            window._draft_export_settings = Mock(return_value={
+                "title": "Sonderangebot",
+                "introduction": "Individuelle Einleitung",
+                "remark": "Individuelle Nachbemerkung",
+                "payment_term_days": 30,
+                "voucher_type": "invoice",
+                "export_target": "finalize",
+            })
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch('gui.main_window.QMessageBox.question', return_value=16384):
+                with patch('gui.main_window.QMessageBox.information'):
+                    window.export_selected_groups_to_lexware_draft()
+
+            _, kwargs = window.lexware_export_service.export_group_as_draft.call_args
+            assert kwargs["voucher_type"] == "invoice"
+            assert kwargs["finalize"] is True
 
 
 if __name__ == "__main__":

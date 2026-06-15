@@ -2,6 +2,23 @@
 ## Rechnungstool – aktueller Ist-Stand
 
 Stand: 2026-06-15
+Aktueller Teststand: 103/103 Tests gruen (`pytest -q`)
+
+## Update 2026-06-15 (Exportsteuerung + Titelfix)
+
+- Exportfluss in der GUI erweitert:
+  - Belegtyp je Exportlauf auswählbar (`Angebot`/`Rechnung`)
+  - Exportziel auswählbar (`Draft`/`Finalisieren`)
+- Lexware-Exportservice unterstützt jetzt endpoint-gesteuert:
+  - Quotations (`/v1/quotations`)
+  - Invoices (`/v1/invoices`)
+  - Finalisierung über Query `?finalize=true`
+- Tabellenfilter erweitert:
+  - RE-Filter für erledigt-Markierung `x` (mit/ohne)
+- Standardtitel korrigiert:
+  - Titel wird pro Gruppe dynamisch gebildet als `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
+  - verhindert fälschliche Übernahme des ersten Gruppentitels auf weitere Gruppen
+- Beschreibungstext enthält keine Mitarbeiternamen mehr.
 ## Update 2026-06-15 (umgesetzt)
 
 - `feature/mandant-specific-data` ist in `main` gemerged.
@@ -11,8 +28,40 @@ Stand: 2026-06-15
   - Positionsanzahl und Positionsvorschau in der Detailansicht
 - `InvoiceProposalMapperService` nutzt `mandant_id` aus der Gruppe als Fallback.
 - CI auf `main` ist gruen; Workflow installiert Runtime-Dependencies plus `libegl1/libgl1` fuer PySide6-Imports.
-- Teststand bleibt 71/71 Tests gruen.
+- Teststand ist jetzt 81/81 Tests gruen.
 - Der Ansatz, bestehende Lexware-Invoices/Quotations per API zu listen oder nachtraeglich zu finalisieren, wurde nach Doku-Pruefung verworfen.
+
+## Update 2026-06-15 (Exporthaertung + Rundreisen)
+
+- Sammel-Export haertet jetzt den Workflow deutlich:
+  - Blockierung bei harten Validierungsfehlern
+  - explizite Bestaetigung bei Warnungen
+  - explizite Bestaetigung bei fehlender Geokodierung
+- Export-Bestaetigung zeigt den effektiven Lexware-Konto-Kontext je Mandant:
+  - Mandant
+  - Base URL
+  - Draft-Endpoint
+  - Company-ID
+- Rundreise-Logik fuer Kundentage mit mehreren Projekten umgesetzt:
+  - automatische Segmentierung Firma -> Projekt 1 -> ... -> letztes Projekt -> Firma
+  - Segmentverteilung auf separate Rechnungen
+  - erste Rechnung = Anfahrt, letzte Rechnung = inkl. Rueckfahrt
+  - Segmentrollen in der Exportvorschau sichtbar
+  - bestehende manuelle Fahrtwerte werden nicht ueberschrieben
+
+## Update 2026-06-15 (Vorlagen + Schnellreferenz + Regeloptionen)
+
+- Wiederkehrende Rechnungsfaelle beschleunigt:
+  - kundenspezifische Artikelsatz-Vorlagen (speichern/anwenden)
+  - Persistenz in Projektdatei, Sitzungsdatei und `.status.json`
+- Schnellauswahl fuer Artikel umgesetzt:
+  - Referenz-Eingabe wie `1,4,7`
+  - robust gegen ungueltige Tokens und Duplikate
+- Wahlregeln umgesetzt:
+  - Weiterfahrt-Zuordnung als Option `tag_1` / `tag_2`
+  - Mehrtagespauschale-Zuordnung als Option `tag_1` / `tag_2`
+  - sicht- und persistierbar im Angebots-/Rechnungsdialog
+- Teststand: 88/88 Tests gruen.
 
 ---
 
@@ -81,9 +130,7 @@ und soll als nächster großer Schritt erweitert werden zu:
 ## Nächster Schritt (gemerkt für nächste Sitzung)
 
 - Nächster fachlicher Schritt:
-  - Export-Blockierung bei Validierungsfehlern konsequent durchsetzen
-  - Sammel-Export-Workflow fuer Warnungen/Fehler praezisieren
-  - danach neue Feature-Branch fuer den naechsten Arbeitsblock starten
+  - optionalen PDF-Open/Download-Flow fuer bekannte Lexware-Beleg-ID separat planen (nicht MVP-Basisfluss)
 
 ---
 

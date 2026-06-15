@@ -63,14 +63,37 @@ Bereits umgesetzt:
 - GUI zeigt jetzt Validierung und Positionsvorschau direkt in Tabelle/Detailbereich.
 - Mapper-Fallback fuer `mandant_id` aus Gruppendaten aktiv.
 - Der verworfene Lexware-Ansatz ist dokumentiert: kein weiterer Arbeitsblock fuer Listing/Finalisierung bestehender Invoices/Quotations ohne bekannte ID.
+- Export blockiert jetzt bei harten Validierungsfehlern.
+- Sammel-Export fordert jetzt explizite Bestaetigung bei Warnungen und bei fehlender Geokodierung.
+- Export-Bestaetigung zeigt Lexware-Konto-Kontext je Mandant (Mandant/Base URL/Endpoint/Company-ID).
+- Rundreisen bei mehreren Projekten am selben Kundentag werden automatisch segmentiert und verteilt (erste Rechnung Anfahrt, letzte Rechnung inkl. Rueckfahrt).
+- Exportvorschau zeigt Segmenttext je Gruppe (Route, km, h) inkl. Rollenhinweis.
+- Teststand aktuell: 81/81.
+
+## Update 2026-06-15 (spaet)
+
+Bereits umgesetzt:
+- Kundenspezifische Artikelsatz-Vorlagen (speichern/anwenden) inkl. Persistenz.
+- Schnellreferenz-Eingabe fuer Artikelauswahl (z. B. `1,4,7`) inkl. Validierung.
+- Wahlregeln fuer Weiterfahrt-Zuordnung (Tag 1/Tag 2) umgesetzt.
+- Wahlregeln fuer Mehrtagespauschale-Zuordnung (Tag 1/Tag 2) umgesetzt.
+- Teststand aktuell: 88/88.
+
+## Update 2026-06-15 (Tagesabschluss)
+
+Bereits umgesetzt:
+- RE-Filter in der GUI ergänzt (`Alle RE`, `Nur ohne RE-x`, `Nur mit RE-x`).
+- Exportmodus erweitert:
+  - Belegtyp pro Lauf (`Angebot`/`Rechnung`)
+  - Exportziel pro Lauf (`Draft`/`Finalisieren`)
+- Titelbildung im Export stabilisiert:
+  - Standardtitel ist immer `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
+  - Auto-Titelvorlagen werden je Gruppe neu berechnet (kein Carry-over mehr).
+- Teststand aktuell: 103/103.
 
 Als nächstes umsetzen:
-- Validierungs- und Exporttransparenz weiter erhöhen:
-- Export bei harten Validierungsfehlern blockieren
-- Workflow fuer Warnungen im Sammel-Export klar steuern
-  - klarer Exporthinweis bei fehlender Geokodierung
-  - optionale Distanzquelle (Routing statt Luftlinie)
-  - Fahrkostenregeln optional kundenstammbasiert zentralisieren
+- Optionalen PDF-Open-Flow fuer bekannte Lexware-Beleg-ID als separaten Arbeitsblock planen.
+- Optional: explizites Titel-Template-Feld mit Platzhaltern (z. B. `{typ} - {projekt}`) anbieten.
 
 ---
 

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from urllib import parse
 from urllib import error, request
@@ -44,6 +45,8 @@ class LexwareDraftExportService:
         payment_term_label: str = "",
         update_existing: bool = False,
         export_reference: str = "",
+        voucher_type: str = "",
+        finalize: bool = False,
     ) -> dict:
         if not self.is_configured():
             return {
@@ -72,13 +75,15 @@ class LexwareDraftExportService:
             remark=remark,
             payment_term_days=payment_term_days,
             payment_term_label=payment_term_label,
+            voucher_type=voucher_type,
         )
         payload = payload_variants[0]
+        endpoint_override = self._endpoint_for_voucher_type(voucher_type)
         if update_existing and str(export_reference or "").strip():
-            url = self._build_update_url(str(export_reference or "").strip())
+            url = self._build_update_url(str(export_reference or "").strip(), endpoint_override=endpoint_override)
             first_try = self._update_draft(url, payload, company_id=company_id)
         else:
-            url = self._build_url()
+            url = self._build_url(endpoint_override=endpoint_override, finalize=bool(finalize))
             first_try = self._post_draft(url, payload, company_id=company_id)
         if first_try.get("success"):
             return first_try
@@ -560,10 +565,12 @@ class LexwareDraftExportService:
                 "response": None,
             }
 
-    def _build_url(self) -> str:
-        if self.draft_endpoint.startswith("http://") or self.draft_endpoint.startswith("https://"):
-            return self.draft_endpoint
-        return f"{self.base_url.rstrip('/')}/{self.draft_endpoint.lstrip('/')}"
+    def _build_url(self, endpoint_override: str = "", finalize: bool = False) -> str:
+        endpoint = str(endpoint_override or self.draft_endpoint or "").strip()
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            return self._with_finalize_query(endpoint, finalize)
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        return self._with_finalize_query(url, finalize)
 
     def _build_url_for_endpoint(self, endpoint: str) -> str:
         text = str(endpoint or "").strip()
@@ -571,15 +578,34 @@ class LexwareDraftExportService:
             return text
         return f"{self.base_url.rstrip('/')}/{text.lstrip('/')}"
 
-    def _build_update_url(self, export_reference: str) -> str:
+    def _build_update_url(self, export_reference: str, endpoint_override: str = "") -> str:
         reference = str(export_reference or "").strip()
         if not reference:
-            return self._build_url()
+            return self._build_url(endpoint_override=endpoint_override)
         if reference.startswith("http://") or reference.startswith("https://"):
             return reference
         if reference.startswith("/"):
             return self._build_url_for_endpoint(reference)
-        return f"{self._build_url().rstrip('/')}/{parse.quote(reference, safe='')}"
+        return f"{self._build_url(endpoint_override=endpoint_override).rstrip('/')}/{parse.quote(reference, safe='')}"
+
+    def _with_finalize_query(self, url: str, finalize: bool) -> str:
+        if not finalize:
+            return str(url or "").strip()
+
+        text = str(url or "").strip()
+        if not text:
+            return text
+
+        separator = "&" if "?" in text else "?"
+        return f"{text}{separator}finalize=true"
+
+    def _endpoint_for_voucher_type(self, voucher_type: str) -> str:
+        normalized = str(voucher_type or "").strip().lower()
+        if normalized == "invoice":
+            return "/v1/invoices"
+        if normalized == "quotation":
+            return "/v1/quotations"
+        return str(self.draft_endpoint or "").strip()
 
     def _extract_list_payload(self, payload) -> list:
         if isinstance(payload, list):
@@ -707,19 +733,27 @@ class LexwareDraftExportService:
         remark: str = "",
         payment_term_days: int | None = None,
         payment_term_label: str = "",
+        voucher_type: str = "",
     ) -> dict:
         customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "")).strip() or "Unbekannter Kunde"
         project_name = str(group.get("projekt_roh", "")).strip() or "Leistung"
         voucher_date = self._as_lexware_datetime(group.get("datum", ""))
         effective_payment_term_days = self.default_payment_term_days if payment_term_days is None else max(int(payment_term_days), 0)
         effective_payment_term_label = str(payment_term_label or "").strip() or f"{effective_payment_term_days} Tage netto"
-        effective_title = str(title or "").strip() or ("Angebot" if self._is_quotation_endpoint() else "Rechnung")
+        
+        is_quotation = self._is_quotation_endpoint(self._endpoint_for_voucher_type(voucher_type))
+        base_title = "Angebot" if is_quotation else "Rechnung"
+        raw_title = str(title or "").strip()
+        is_auto_title = bool(re.match(r"^(angebot|rechnung)\s*-", raw_title, flags=re.IGNORECASE))
+        if not raw_title or raw_title.lower() in {"angebot", "rechnung"} or is_auto_title:
+            effective_title = f"{base_title} - {project_name}"
+        else:
+            effective_title = raw_title
         effective_introduction = str(introduction or "").strip() or f"Automatisch erzeugter Entwurf für {project_name}"
         effective_remark = str(remark or "").strip() or "Erzeugt durch Rechnungsautomatismus"
 
         description_parts = [
             f"Projekt: {project_name}",
-            f"Mitarbeiter: {', '.join(group.get('mitarbeiter_liste', []))}",
         ]
         remarks = str(group.get("bemerkungen_roh", "")).strip()
         if remarks:
@@ -762,7 +796,7 @@ class LexwareDraftExportService:
         }
 
         # Quotations require an expirationDate in Lexware.
-        if self._is_quotation_endpoint():
+        if is_quotation:
             payload["expirationDate"] = self._add_days_to_lexware_datetime(
                 voucher_date,
                 effective_payment_term_days,
@@ -787,24 +821,14 @@ class LexwareDraftExportService:
         if not proposal.positions:
             return [self._build_line_item(project_name, description_parts)]
 
-        travel_mode = str(group.get("travel_mode", "extra_article") or "extra_article").strip()
-        travel_detail = self.position_service.travel_detail_text(group)
-
         line_items = []
-        for index, position in enumerate(proposal.positions):
+        for position in proposal.positions:
             tax_rate = float(position.tax_rate or self.default_tax_rate)
             net = float(position.unit_price_net or self.default_net_amount)
             gross = round(net * (1 + (tax_rate / 100.0)), 2)
 
             base_description = str(getattr(position, "description", "") or "").strip()
             line_description_parts = [base_description] if base_description else [part for part in description_parts if part]
-            if travel_detail:
-                is_first_item = index == 0
-                is_travel_item = "fahrtkosten" in str(position.title or "").strip().lower()
-                if travel_mode == "included_in_first_article" and is_first_item and travel_detail not in line_description_parts:
-                    line_description_parts.append(travel_detail)
-                elif travel_mode == "extra_article" and is_travel_item and travel_detail not in line_description_parts:
-                    line_description_parts.append(travel_detail)
 
             line_items.append(
                 {
@@ -832,6 +856,7 @@ class LexwareDraftExportService:
         remark: str = "",
         payment_term_days: int | None = None,
         payment_term_label: str = "",
+        voucher_type: str = "",
     ) -> list[dict]:
         base_payload = self._build_payload(
             group,
@@ -840,6 +865,7 @@ class LexwareDraftExportService:
             remark=remark,
             payment_term_days=payment_term_days,
             payment_term_label=payment_term_label,
+            voucher_type=voucher_type,
         )
 
         nested_payload = dict(base_payload)
@@ -901,12 +927,13 @@ class LexwareDraftExportService:
 
         return base_dt.isoformat(timespec="milliseconds")
 
-    def _is_quotation_endpoint(self) -> bool:
-        endpoint = str(self.draft_endpoint or "").strip().lower()
+    def _is_quotation_endpoint(self, endpoint_override: str = "") -> bool:
+        endpoint = str(endpoint_override or self.draft_endpoint or "").strip().lower()
         return "quotations" in endpoint
 
-    def is_quotation_mode(self) -> bool:
-        return self._is_quotation_endpoint()
+    def is_quotation_mode(self, voucher_type: str = "") -> bool:
+        endpoint = self._endpoint_for_voucher_type(voucher_type)
+        return self._is_quotation_endpoint(endpoint)
 
     def _add_days_to_lexware_datetime(self, value: str, days: int) -> str:
         base_dt = datetime.now().astimezone()

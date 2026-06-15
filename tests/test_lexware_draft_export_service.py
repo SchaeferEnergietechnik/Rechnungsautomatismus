@@ -65,7 +65,7 @@ def test_quotation_payload_contains_expiration_date(monkeypatch):
 
     payload = service._build_payload(_sample_group())
 
-    assert payload["title"] == "Angebot"
+    assert payload["title"].startswith("Angebot - ")
     assert "expirationDate" in payload
     assert str(payload["expirationDate"]).strip() != ""
 
@@ -76,7 +76,7 @@ def test_invoice_payload_has_no_expiration_date(monkeypatch):
 
     payload = service._build_payload(_sample_group())
 
-    assert payload["title"] == "Rechnung"
+    assert payload["title"].startswith("Rechnung - ")
     assert "expirationDate" not in payload
 
 
@@ -223,6 +223,7 @@ def test_payload_includes_travel_text_in_extra_article_description():
     assert len(payload["lineItems"]) == 2
     assert "Fahrtkostenangaben" not in payload["lineItems"][0]["description"]
     assert "Fahrtkostenangaben" in payload["lineItems"][1]["description"]
+    assert payload["lineItems"][1]["description"].count("Fahrtkostenangaben") == 1
     assert "10 km" in payload["lineItems"][1]["description"]
     assert "EUR" not in payload["lineItems"][1]["description"]
 
@@ -249,6 +250,7 @@ def test_payload_includes_travel_text_in_first_article_description_when_included
 
     assert len(payload["lineItems"]) == 1
     assert "Fahrtkostenangaben" in payload["lineItems"][0]["description"]
+    assert payload["lineItems"][0]["description"].count("Fahrtkostenangaben") == 1
     assert "2.00 h" in payload["lineItems"][0]["description"]
     assert "EUR" not in payload["lineItems"][0]["description"]
 
@@ -469,3 +471,136 @@ def test_payload_uses_matched_customer_address_instead_of_project_address():
     assert payload["address"]["zip"] == "34260"
     assert payload["address"]["city"] == "Kaufungen"
     assert payload["address"]["street"] != "Projektadresse 42, 99999 Baustelle"
+
+
+def test_payload_title_includes_project_name():
+    service = LexwareDraftExportService()
+    group = _sample_group()
+    group["adresse_roh"] = "Neutraubling"
+    group["projekt_roh"] = "Projekt Alpha"
+    group["selected_articles"] = [
+        {
+            "Artikelnummer": "ET-1",
+            "Bezeichnung": "Service",
+            "Einheit": "Stunde",
+            "Steuerart": "USt19",
+            "VK (Netto)": "200,00",
+        }
+    ]
+
+    payload = service._build_payload(group)
+
+    assert "Projekt Alpha" in payload["title"]
+    assert payload["title"] == "Angebot - Projekt Alpha"
+
+
+def test_travel_detail_text_reflects_segment_role_first_invoice():
+    from services.invoice_position_service import InvoicePositionService
+    
+    position_service = InvoicePositionService()
+    group = {
+        "travel_hours": 1.5,
+        "travel_km": 30.0,
+        "travel_segment_role": "first_invoice_outbound",
+        "travel_route_segments": ["Firma -> Neutraubling"],
+    }
+
+    text = position_service.travel_detail_text(group)
+
+    assert "Anfahrt" in text
+    assert "Firma -> Neutraubling" in text
+    assert "1.50 h" in text
+    assert "30 km" in text
+
+
+def test_travel_detail_text_reflects_segment_role_middle_invoice():
+    from services.invoice_position_service import InvoicePositionService
+    
+    position_service = InvoicePositionService()
+    group = {
+        "travel_hours": 0.25,
+        "travel_km": 10.0,
+        "travel_segment_role": "middle_invoice",
+        "travel_route_segments": ["Neutraubling -> Vohenstrauß"],
+    }
+
+    text = position_service.travel_detail_text(group)
+
+    assert "Zwischenfahrt" in text
+    assert "Neutraubling -> Vohenstrauß" in text
+    assert "0.25 h" in text
+    assert "10 km" in text
+
+
+def test_travel_detail_text_reflects_segment_role_last_invoice():
+    from services.invoice_position_service import InvoicePositionService
+    
+    position_service = InvoicePositionService()
+    group = {
+        "travel_hours": 0.75,
+        "travel_km": 20.0,
+        "travel_segment_role": "last_invoice_with_return",
+        "travel_route_segments": ["Vohenstrauß -> Firma (inkl. Rueckfahrt zur Firma)"],
+    }
+
+    text = position_service.travel_detail_text(group)
+
+    assert "Rückfahrt" in text
+    assert "Vohenstrauß" in text
+    assert "0.75 h" in text
+    assert "20 km" in text
+
+
+def test_payload_description_omits_employee_names():
+    service = LexwareDraftExportService()
+    payload = service._build_payload(_sample_group())
+
+    description = str(payload["lineItems"][0].get("description", "") or "")
+    assert "Mitarbeiter:" not in description
+    assert "Max Mustermann" not in description
+
+
+def test_export_group_uses_invoice_endpoint_and_finalize_query():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service.base_url = "https://api.lexware.test"
+
+    captured = {}
+
+    def _fake_post(url, payload, company_id=""):
+        captured["url"] = url
+        return {
+            "success": True,
+            "status_code": 201,
+            "error": "",
+            "response": {"id": "new-1"},
+            "payload": payload,
+        }
+
+    service._post_draft = _fake_post
+
+    result = service.export_group_as_draft(
+        _sample_group(),
+        voucher_type="invoice",
+        finalize=True,
+    )
+
+    assert result["success"] is True
+    assert "/v1/invoices" in captured["url"]
+    assert "finalize=true" in captured["url"]
+
+
+def test_auto_title_template_is_recomputed_per_group():
+    service = LexwareDraftExportService()
+
+    first_group = _sample_group()
+    first_group["projekt_roh"] = "Neutraubling"
+    first_payload = service._build_payload(first_group, title="Angebot - Neutraubling")
+
+    second_group = _sample_group()
+    second_group["projekt_roh"] = "Vohenstrauß"
+    second_payload = service._build_payload(second_group, title="Angebot - Neutraubling")
+
+    assert first_payload["title"] == "Angebot - Neutraubling"
+    assert second_payload["title"] == "Angebot - Vohenstrauß"

@@ -37,7 +37,7 @@ Bereits vorhanden:
 
 Noch nicht vorhanden:
 - vollständige Rechnungsadressbearbeitung als eigene Zieladresse
-- End-to-End Feldvalidierung mit klaren Exportblockern in der GUI
+- PDF-Open/Download-Flow fuer bekannte Lexware-Beleg-IDs
 - Final-/PDF-Flow fuer Belege mit bekannter API-ID
 - Logo-/Branding-Darstellung im Hauptfenster
 
@@ -75,11 +75,32 @@ Tagesabschluss 2026-06-15:
   - Grund: offizielle API-Doku dokumentiert Create mit optionalem `finalize=true` und Retrieve per ID, aber keine allgemeine Listen-API und keine nachtraegliche Statusaenderung
 
 Nächster Arbeitsblock:
-- Validierungs- und Exporthärtung:
-  - harte Exportblocker vor Sammel-Export durchsetzen
-  - Feldfehler pro Gruppe weiterhin klar visualisieren
-  - Pflichtfelder vor Export vollständig prüfen
-  - Fehler-/Warnungs-Workflow für Sammel-Export ergänzen
+- Wiederkehrende Rechnungsfaelle beschleunigen:
+  - umgesetzt
+
+Fortschrittsergaenzung 2026-06-15 (spaet):
+- Exporthaertung umgesetzt:
+  - harte Exportblocker aktiv
+  - Warnungs- und Geokodierungs-Bestaetigung vor Export
+  - Konto-Transparenz im Exportdialog (Mandant/Base URL/Endpoint/Company-ID)
+- Rundreisen fuer Mehrprojekt-Kundentage umgesetzt:
+  - automatische Segmentierung und Verteilung auf Rechnungen
+  - erste Rechnung = Anfahrt, letzte Rechnung = inkl. Rueckfahrt
+  - Segmentrollen in Exportvorschau sichtbar
+- Teststand: 81/81 Tests gruen
+
+Fortschrittsergaenzung 2026-06-15 (nachts):
+- Wiederkehrende Rechnungsfaelle beschleunigt:
+  - kundenspezifische Artikelsatz-Vorlagen (speichern/anwenden)
+  - Schnellreferenz fuer Artikelauswahl (z. B. `1,4,7`)
+- Wahlregeln umgesetzt:
+  - Rundreise-Weiterfahrt als Regel `tag_1` / `tag_2`
+  - Mehrtagespauschale-Zuordnung als Regel `tag_1` / `tag_2`
+- Persistenz der neuen Regeln/Funktionen in Projekt/Sitzung/Statusdatei vorhanden
+- Teststand: 88/88 Tests gruen
+
+Neuer naechster Arbeitsblock:
+- optionaler PDF-Open/Download-Flow fuer bekannte Lexware-Beleg-ID
 
 ---
 

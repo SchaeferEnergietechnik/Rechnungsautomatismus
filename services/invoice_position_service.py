@@ -150,7 +150,41 @@ class InvoicePositionService:
                 )
             )
 
+        self._apply_multi_day_allowance_assignment(group, positions)
+
         return positions
+
+    def _apply_multi_day_allowance_assignment(self, group: dict, positions: list[InvoicePosition]) -> None:
+        if not positions:
+            return
+
+        start_date = str(group.get("zeitraum_von", "") or group.get("datum", "") or "").strip()
+        end_date = str(group.get("zeitraum_bis", "") or group.get("datum", "") or "").strip()
+        if not start_date or not end_date or start_date == end_date:
+            return
+
+        rule = str(group.get("multi_day_allowance_assignment_rule", "tag_1") or "tag_1").strip().lower()
+        if rule not in {"tag_1", "tag_2"}:
+            rule = "tag_1"
+
+        target_day = start_date if rule == "tag_1" else end_date
+        day_label = "Tag 1" if rule == "tag_1" else "Tag 2"
+        assignment_text = f"Mehrtagespauschale zugeordnet: {day_label} ({target_day})"
+
+        for position in positions:
+            title = str(getattr(position, "title", "") or "").strip().lower()
+            if "mehrtages" not in title:
+                continue
+
+            existing_description = str(getattr(position, "description", "") or "").strip()
+            if assignment_text in existing_description:
+                continue
+
+            position.description = (
+                (existing_description + "\n" + assignment_text).strip()
+                if existing_description
+                else assignment_text
+            )
 
     def _apply_travel_costs(self, group: dict, positions: list[InvoicePosition]) -> None:
         travel_amount = self._travel_amount(group)
@@ -163,7 +197,8 @@ class InvoicePositionService:
             travel_detail = self.travel_detail_text(group)
             if travel_detail:
                 prefix = str(positions[0].description or "").strip()
-                positions[0].description = (prefix + "\n" + travel_detail).strip() if prefix else travel_detail
+                if travel_detail not in prefix:
+                    positions[0].description = (prefix + "\n" + travel_detail).strip() if prefix else travel_detail
             return
 
         if mode == "included_in_first_article" and not positions:
@@ -190,7 +225,26 @@ class InvoicePositionService:
         hours = self._as_float(group.get("travel_hours", 0.0), 0.0)
         km = self._as_float(group.get("travel_km", 0.0), 0.0)
         km_display = int(round(km))
-        return f"Fahrtkostenangaben: {hours:.2f} h, {km_display} km (Hin- und Rückfahrt)"
+        
+        segment_role = str(group.get("travel_segment_role", "") or "").strip().lower()
+        segment_desc = ""
+        if segment_role == "first_invoice_outbound":
+            segment_desc = "Anfahrt"
+        elif segment_role == "last_invoice_with_return":
+            segment_desc = "Zwischenfahrt + Rückfahrt"
+        elif segment_role == "middle_invoice":
+            segment_desc = "Zwischenfahrt"
+        else:
+            segment_desc = "Hin- und Rückfahrt"
+        
+        route_segments = group.get("travel_route_segments", [])
+        route_info = ""
+        if isinstance(route_segments, list) and route_segments:
+            cleaned_segments = [str(seg).strip() for seg in route_segments if str(seg).strip()]
+            if cleaned_segments:
+                route_info = f" ({' | '.join(cleaned_segments)})"
+        
+        return f"Fahrtkostenangaben: {hours:.2f} h, {km_display} km ({segment_desc}){route_info}"
 
     def _travel_amount(self, group: dict) -> float:
         hours = self._as_float(group.get("travel_hours", 0.0), 0.0)
