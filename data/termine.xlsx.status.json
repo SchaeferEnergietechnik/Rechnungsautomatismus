@@ -1,1 +1,22 @@
-{}
+{
+  "__meta__": {
+    "customer_article_templates": {
+      "ges_power_service": [
+        {
+          "name": "Standard Projekt X",
+          "customer_key": "nr:2002",
+          "customer_label": "PowerCorp (Nr. 2002)",
+          "articles": [
+            {
+              "Artikelnummer": "PS-1",
+              "Bezeichnung": "PS Service",
+              "Einheit": "Stunde",
+              "Steuerart": "USt19",
+              "VK (Netto)": "200,00"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

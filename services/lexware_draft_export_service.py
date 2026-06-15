@@ -713,7 +713,15 @@ class LexwareDraftExportService:
         voucher_date = self._as_lexware_datetime(group.get("datum", ""))
         effective_payment_term_days = self.default_payment_term_days if payment_term_days is None else max(int(payment_term_days), 0)
         effective_payment_term_label = str(payment_term_label or "").strip() or f"{effective_payment_term_days} Tage netto"
-        effective_title = str(title or "").strip() or ("Angebot" if self._is_quotation_endpoint() else "Rechnung")
+        
+        location = str(group.get("adresse_roh", "")).strip()
+        if not location:
+            location = str(group.get("travel_route_destination", "")).strip()
+        if location:
+            base_title = "Angebot" if self._is_quotation_endpoint() else "Rechnung"
+            effective_title = str(title or "").strip() or f"{base_title} - {location}"
+        else:
+            effective_title = str(title or "").strip() or ("Angebot" if self._is_quotation_endpoint() else "Rechnung")
         effective_introduction = str(introduction or "").strip() or f"Automatisch erzeugter Entwurf für {project_name}"
         effective_remark = str(remark or "").strip() or "Erzeugt durch Rechnungsautomatismus"
 

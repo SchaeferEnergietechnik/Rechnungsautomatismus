@@ -65,7 +65,7 @@ def test_quotation_payload_contains_expiration_date(monkeypatch):
 
     payload = service._build_payload(_sample_group())
 
-    assert payload["title"] == "Angebot"
+    assert payload["title"].startswith("Angebot - ")
     assert "expirationDate" in payload
     assert str(payload["expirationDate"]).strip() != ""
 
@@ -76,7 +76,7 @@ def test_invoice_payload_has_no_expiration_date(monkeypatch):
 
     payload = service._build_payload(_sample_group())
 
-    assert payload["title"] == "Rechnung"
+    assert payload["title"].startswith("Rechnung - ")
     assert "expirationDate" not in payload
 
 
@@ -471,3 +471,80 @@ def test_payload_uses_matched_customer_address_instead_of_project_address():
     assert payload["address"]["zip"] == "34260"
     assert payload["address"]["city"] == "Kaufungen"
     assert payload["address"]["street"] != "Projektadresse 42, 99999 Baustelle"
+
+
+def test_payload_title_includes_location():
+    service = LexwareDraftExportService()
+    group = _sample_group()
+    group["adresse_roh"] = "Neutraubling"
+    group["selected_articles"] = [
+        {
+            "Artikelnummer": "ET-1",
+            "Bezeichnung": "Service",
+            "Einheit": "Stunde",
+            "Steuerart": "USt19",
+            "VK (Netto)": "200,00",
+        }
+    ]
+
+    payload = service._build_payload(group)
+
+    assert "Neutraubling" in payload["title"]
+    assert payload["title"] == "Angebot - Neutraubling"
+
+
+def test_travel_detail_text_reflects_segment_role_first_invoice():
+    from services.invoice_position_service import InvoicePositionService
+    
+    position_service = InvoicePositionService()
+    group = {
+        "travel_hours": 1.5,
+        "travel_km": 30.0,
+        "travel_segment_role": "first_invoice_outbound",
+        "travel_route_segments": ["Firma -> Neutraubling"],
+    }
+
+    text = position_service.travel_detail_text(group)
+
+    assert "Anfahrt" in text
+    assert "Firma -> Neutraubling" in text
+    assert "1.50 h" in text
+    assert "30 km" in text
+
+
+def test_travel_detail_text_reflects_segment_role_middle_invoice():
+    from services.invoice_position_service import InvoicePositionService
+    
+    position_service = InvoicePositionService()
+    group = {
+        "travel_hours": 0.25,
+        "travel_km": 10.0,
+        "travel_segment_role": "middle_invoice",
+        "travel_route_segments": ["Neutraubling -> Vohenstrauß"],
+    }
+
+    text = position_service.travel_detail_text(group)
+
+    assert "Zwischenfahrt" in text
+    assert "Neutraubling -> Vohenstrauß" in text
+    assert "0.25 h" in text
+    assert "10 km" in text
+
+
+def test_travel_detail_text_reflects_segment_role_last_invoice():
+    from services.invoice_position_service import InvoicePositionService
+    
+    position_service = InvoicePositionService()
+    group = {
+        "travel_hours": 0.75,
+        "travel_km": 20.0,
+        "travel_segment_role": "last_invoice_with_return",
+        "travel_route_segments": ["Vohenstrauß -> Firma (inkl. Rueckfahrt zur Firma)"],
+    }
+
+    text = position_service.travel_detail_text(group)
+
+    assert "Rückfahrt" in text
+    assert "Vohenstrauß" in text
+    assert "0.75 h" in text
+    assert "20 km" in text

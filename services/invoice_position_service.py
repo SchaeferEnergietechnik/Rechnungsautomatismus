@@ -225,7 +225,26 @@ class InvoicePositionService:
         hours = self._as_float(group.get("travel_hours", 0.0), 0.0)
         km = self._as_float(group.get("travel_km", 0.0), 0.0)
         km_display = int(round(km))
-        return f"Fahrtkostenangaben: {hours:.2f} h, {km_display} km (Hin- und Rückfahrt)"
+        
+        segment_role = str(group.get("travel_segment_role", "") or "").strip().lower()
+        segment_desc = ""
+        if segment_role == "first_invoice_outbound":
+            segment_desc = "Anfahrt"
+        elif segment_role == "last_invoice_with_return":
+            segment_desc = "Zwischenfahrt + Rückfahrt"
+        elif segment_role == "middle_invoice":
+            segment_desc = "Zwischenfahrt"
+        else:
+            segment_desc = "Hin- und Rückfahrt"
+        
+        route_segments = group.get("travel_route_segments", [])
+        route_info = ""
+        if isinstance(route_segments, list) and route_segments:
+            cleaned_segments = [str(seg).strip() for seg in route_segments if str(seg).strip()]
+            if cleaned_segments:
+                route_info = f" ({' | '.join(cleaned_segments)})"
+        
+        return f"Fahrtkostenangaben: {hours:.2f} h, {km_display} km ({segment_desc}){route_info}"
 
     def _travel_amount(self, group: dict) -> float:
         hours = self._as_float(group.get("travel_hours", 0.0), 0.0)
