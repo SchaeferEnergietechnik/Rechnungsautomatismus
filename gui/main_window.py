@@ -2910,6 +2910,35 @@ class MainWindow(QMainWindow):
             )
             return
 
+        warning_groups = [
+            group for group in selected_groups
+            if int(group.get("invoice_validation_warnings", 0) or 0) > 0
+        ]
+        if warning_groups:
+            warning_preview = []
+            for index, group in enumerate(warning_groups[:10], start=1):
+                warning_preview.append(
+                    f"{index}. {self._format_date_for_display(group.get('datum', ''))} | "
+                    f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')} | "
+                    f"Warnungen: {int(group.get('invoice_validation_warnings', 0) or 0)}"
+                )
+            if len(warning_groups) > 10:
+                warning_preview.append(f"... +{len(warning_groups) - 10} weitere")
+
+            warning_decision = QMessageBox.question(
+                self,
+                "Export mit Warnungen bestätigen",
+                "Die Auswahl enthält Gruppen mit Warnungen.\n"
+                "Der Export ist möglich, sollte aber fachlich geprüft werden.\n\n"
+                f"Mit Warnungen: {len(warning_groups)} Gruppe(n)\n\n"
+                + "\n".join(warning_preview)
+                + "\n\nTrotzdem exportieren?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if warning_decision != QMessageBox.Yes:
+                return
+
         self._configure_lexware_service_for_mandant(self.active_mandant_id)
 
         if self.lexware_export_service is None or not self.lexware_export_service.is_configured():
@@ -2977,6 +3006,7 @@ class MainWindow(QMainWindow):
             f"Ausgewählt: {len(selected_groups)} Gruppe(n)\n"
             f"Wird exportiert: {len(export_candidates)} Gruppe(n)\n"
             f"Übersprungen (bereits exportiert): {skipped_count}\n\n"
+            f"Mit Warnungen (Auswahl): {len(warning_groups)}\n"
             f"Modus: {'Überschreiben bestehender Angebote' if export_mode == 'overwrite' else 'Neue Entwürfe anlegen'}\n\n"
             f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
             "Jetzt exportieren?"
@@ -2994,6 +3024,7 @@ class MainWindow(QMainWindow):
         ok_count = 0
         fail_count = 0
         first_error = ""
+        failed_previews: list[str] = []
         export_settings = self._draft_export_settings()
 
         for group in export_candidates:
@@ -3043,27 +3074,53 @@ class MainWindow(QMainWindow):
                     first_error = f"Status: {status} | Fehler: {err}"
                     if response:
                         first_error += f" | Antwort: {response}"
+                if len(failed_previews) < 8:
+                    failed_previews.append(
+                        f"- {self._format_date_for_display(group.get('datum', ''))} | "
+                        f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')} | "
+                        f"{result.get('error') or 'Unbekannter Fehler'}"
+                    )
+
+        warning_export_count = sum(
+            1 for group in export_candidates
+            if int(group.get("invoice_validation_warnings", 0) or 0) > 0
+        )
 
         self._mark_changed(export_candidates)
         self._save_manual_data()
         self.refresh_table()
 
         self._log_action(
-            f"Lexware Draft Export | erfolgreich: {ok_count} | fehlgeschlagen: {fail_count} | uebersprungen: {skipped_count}"
+            "Lexware Draft Export | "
+            f"erfolgreich: {ok_count} | fehlgeschlagen: {fail_count} | "
+            f"uebersprungen: {skipped_count} | mit_warnungen: {warning_export_count}"
         )
 
         if fail_count == 0:
             QMessageBox.information(
                 self,
                 "Lexware Draft Export",
-                f"Export abgeschlossen. Erfolgreich: {ok_count}\nUebersprungen (bereits exportiert): {skipped_count}",
+                "Export abgeschlossen.\n"
+                f"Erfolgreich: {ok_count}\n"
+                f"Mit Warnungen (exportiert): {warning_export_count}\n"
+                f"Uebersprungen (bereits exportiert): {skipped_count}",
             )
             return
+
+        failed_text = "\n".join(failed_previews)
+        if fail_count > len(failed_previews):
+            failed_text += f"\n... +{fail_count - len(failed_previews)} weitere Fehler"
 
         QMessageBox.warning(
             self,
             "Lexware Draft Export mit Fehlern",
-            f"Erfolgreich: {ok_count}\nFehlgeschlagen: {fail_count}\nUebersprungen (bereits exportiert): {skipped_count}\n\nErster Fehler:\n{first_error}",
+            "Export abgeschlossen mit Fehlern.\n"
+            f"Erfolgreich: {ok_count}\n"
+            f"Fehlgeschlagen: {fail_count}\n"
+            f"Mit Warnungen (exportiert): {warning_export_count}\n"
+            f"Uebersprungen (bereits exportiert): {skipped_count}\n\n"
+            f"Erster Fehler:\n{first_error}\n\n"
+            f"Fehlerliste:\n{failed_text}",
         )
 
     def _is_already_exported(self, group: dict) -> bool:

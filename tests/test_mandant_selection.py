@@ -433,6 +433,86 @@ def test_lexware_export_blocks_groups_with_validation_errors(config_loader, cont
             window.lexware_export_service.is_configured.assert_not_called()
 
 
+def test_lexware_export_with_warnings_requires_confirmation(config_loader, contacts_importer):
+    """Test: Export mit Warnungen erfordert explizite Bestätigung."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window._configure_lexware_service_for_mandant = Mock()
+            window._selected_groups = Mock(return_value=[
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 2,
+                }
+            ])
+
+            with patch('gui.main_window.QMessageBox.question', return_value=65536):
+                window.export_selected_groups_to_lexware_draft()
+
+            window.lexware_export_service.is_configured.assert_not_called()
+
+
+def test_lexware_export_summary_includes_warning_count(config_loader, contacts_importer):
+    """Test: Erfolgszusammenfassung enthält Anzahl exportierter Gruppen mit Warnungen."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 1,
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window._configure_lexware_service_for_mandant = Mock()
+            window._get_lexware_company_id_for_mandant = Mock(return_value="company-power-service")
+            window.draft_title_edit = Mock(text=Mock(return_value="Sonderangebot"))
+            window.draft_introduction_edit = Mock(toPlainText=Mock(return_value="Individuelle Einleitung"))
+            window.draft_remark_edit = Mock(toPlainText=Mock(return_value="Individuelle Nachbemerkung"))
+            window.draft_payment_term_days_spin = Mock(value=Mock(return_value=30))
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch('gui.main_window.QMessageBox.question', side_effect=[16384, 16384]):
+                with patch('gui.main_window.QMessageBox.information') as info_mock:
+                    window.export_selected_groups_to_lexware_draft()
+
+            info_mock.assert_called_once()
+            info_text = info_mock.call_args.args[2]
+            assert "Mit Warnungen (exportiert): 1" in info_text
+
+
 def test_draft_settings_survive_project_roundtrip(config_loader, contacts_importer, tmp_path):
     """Test: Draft-Felder werden mit Projektdatei gespeichert und geladen."""
     from gui.main_window import MainWindow
