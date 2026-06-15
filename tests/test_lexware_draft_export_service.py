@@ -589,3 +589,18 @@ def test_export_group_uses_invoice_endpoint_and_finalize_query():
     assert result["success"] is True
     assert "/v1/invoices" in captured["url"]
     assert "finalize=true" in captured["url"]
+
+
+def test_auto_title_template_is_recomputed_per_group():
+    service = LexwareDraftExportService()
+
+    first_group = _sample_group()
+    first_group["projekt_roh"] = "Neutraubling"
+    first_payload = service._build_payload(first_group, title="Angebot - Neutraubling")
+
+    second_group = _sample_group()
+    second_group["projekt_roh"] = "Vohenstrauß"
+    second_payload = service._build_payload(second_group, title="Angebot - Neutraubling")
+
+    assert first_payload["title"] == "Angebot - Neutraubling"
+    assert second_payload["title"] == "Angebot - Vohenstrauß"

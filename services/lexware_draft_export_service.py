@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from urllib import parse
 from urllib import error, request
@@ -743,7 +744,8 @@ class LexwareDraftExportService:
         is_quotation = self._is_quotation_endpoint(self._endpoint_for_voucher_type(voucher_type))
         base_title = "Angebot" if is_quotation else "Rechnung"
         raw_title = str(title or "").strip()
-        if not raw_title or raw_title.lower() in {"angebot", "rechnung"}:
+        is_auto_title = bool(re.match(r"^(angebot|rechnung)\s*-", raw_title, flags=re.IGNORECASE))
+        if not raw_title or raw_title.lower() in {"angebot", "rechnung"} or is_auto_title:
             effective_title = f"{base_title} - {project_name}"
         else:
             effective_title = raw_title
