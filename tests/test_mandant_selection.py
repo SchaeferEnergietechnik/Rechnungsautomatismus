@@ -1155,5 +1155,75 @@ def test_draft_preview_shows_positions(config_loader, contacts_importer):
             assert "Einheit: Stk | Netto: 50,00 | Steuer: USt19" in text
 
 
+def test_has_re_done_marker_detects_x(config_loader, contacts_importer):
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+
+            assert window._has_re_done_marker({"re_roh_liste": ["", "x"]}) is True
+            assert window._has_re_done_marker({"re_roh_liste": ["X"]}) is True
+            assert window._has_re_done_marker({"re_roh_liste": ["re-1", ""]}) is False
+            assert window._has_re_done_marker({"re_roh_liste": "x, re-2"}) is True
+
+
+def test_lexware_export_passes_voucher_type_and_export_target(config_loader, contacts_importer):
+    """Test: GUI-Export übergibt Belegtyp und Finalize-Flag an den Lexware-Service."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 0,
+                    "travel_km": 10.0,
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window._configure_lexware_service_for_mandant = Mock()
+            window._get_lexware_company_id_for_mandant = Mock(return_value="company-power-service")
+            window._draft_export_settings = Mock(return_value={
+                "title": "Sonderangebot",
+                "introduction": "Individuelle Einleitung",
+                "remark": "Individuelle Nachbemerkung",
+                "payment_term_days": 30,
+                "voucher_type": "invoice",
+                "export_target": "finalize",
+            })
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.export_group_as_draft = Mock(return_value={
+                "success": True,
+                "response": {"id": "draft-1"},
+            })
+
+            with patch('gui.main_window.QMessageBox.question', return_value=16384):
+                with patch('gui.main_window.QMessageBox.information'):
+                    window.export_selected_groups_to_lexware_draft()
+
+            _, kwargs = window.lexware_export_service.export_group_as_draft.call_args
+            assert kwargs["voucher_type"] == "invoice"
+            assert kwargs["finalize"] is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

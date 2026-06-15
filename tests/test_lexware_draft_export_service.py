@@ -473,10 +473,11 @@ def test_payload_uses_matched_customer_address_instead_of_project_address():
     assert payload["address"]["street"] != "Projektadresse 42, 99999 Baustelle"
 
 
-def test_payload_title_includes_location():
+def test_payload_title_includes_project_name():
     service = LexwareDraftExportService()
     group = _sample_group()
     group["adresse_roh"] = "Neutraubling"
+    group["projekt_roh"] = "Projekt Alpha"
     group["selected_articles"] = [
         {
             "Artikelnummer": "ET-1",
@@ -489,8 +490,8 @@ def test_payload_title_includes_location():
 
     payload = service._build_payload(group)
 
-    assert "Neutraubling" in payload["title"]
-    assert payload["title"] == "Angebot - Neutraubling"
+    assert "Projekt Alpha" in payload["title"]
+    assert payload["title"] == "Angebot - Projekt Alpha"
 
 
 def test_travel_detail_text_reflects_segment_role_first_invoice():
@@ -548,3 +549,43 @@ def test_travel_detail_text_reflects_segment_role_last_invoice():
     assert "Vohenstrauß" in text
     assert "0.75 h" in text
     assert "20 km" in text
+
+
+def test_payload_description_omits_employee_names():
+    service = LexwareDraftExportService()
+    payload = service._build_payload(_sample_group())
+
+    description = str(payload["lineItems"][0].get("description", "") or "")
+    assert "Mitarbeiter:" not in description
+    assert "Max Mustermann" not in description
+
+
+def test_export_group_uses_invoice_endpoint_and_finalize_query():
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.access_token = "token"
+    service.base_url = "https://api.lexware.test"
+
+    captured = {}
+
+    def _fake_post(url, payload, company_id=""):
+        captured["url"] = url
+        return {
+            "success": True,
+            "status_code": 201,
+            "error": "",
+            "response": {"id": "new-1"},
+            "payload": payload,
+        }
+
+    service._post_draft = _fake_post
+
+    result = service.export_group_as_draft(
+        _sample_group(),
+        voucher_type="invoice",
+        finalize=True,
+    )
+
+    assert result["success"] is True
+    assert "/v1/invoices" in captured["url"]
+    assert "finalize=true" in captured["url"]

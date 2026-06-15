@@ -112,7 +112,7 @@ class MainWindow(QMainWindow):
         self.save_session_button = QPushButton("Sitzung speichern")
         self.export_csv_button = QPushButton("CSV exportieren")
         self.export_json_button = QPushButton("JSON exportieren")
-        self.lexware_export_button = QPushButton("Lexware Draft exportieren")
+        self.lexware_export_button = QPushButton("Lexware exportieren")
         self.offer_editor_button = QPushButton("Angebot/Rechnung bearbeiten")
         
         self.mandant_combo = QComboBox()
@@ -183,6 +183,16 @@ class MainWindow(QMainWindow):
         self.draft_payment_term_days_spin.setValue(getattr(self.lexware_export_service, "default_payment_term_days", 14))
         self.draft_payment_term_days_spin.setSuffix(" Tage netto")
         self.draft_payment_term_days_spin.valueChanged.connect(self._update_draft_preview)
+
+        self.voucher_type_combo = QComboBox()
+        self.voucher_type_combo.addItem("Angebot", "quotation")
+        self.voucher_type_combo.addItem("Rechnung", "invoice")
+        self.voucher_type_combo.currentIndexChanged.connect(self._update_draft_preview)
+
+        self.export_target_combo = QComboBox()
+        self.export_target_combo.addItem("Als Draft ablegen", "draft")
+        self.export_target_combo.addItem("Finalisieren", "finalize")
+        self.export_target_combo.currentIndexChanged.connect(self._update_draft_preview)
 
         self.travel_mode_combo = QComboBox()
         self.travel_mode_combo.addItem("Fahrtkosten als extra Artikel", "extra_article")
@@ -270,6 +280,10 @@ class MainWindow(QMainWindow):
         self.changed_filter_combo.addItems(["Alle", "Nur geänderte", "Nur ungeänderte"])
         self.changed_filter_combo.setMinimumWidth(150)
 
+        self.re_filter_combo = QComboBox()
+        self.re_filter_combo.addItems(["Alle RE", "Nur ohne RE-x", "Nur mit RE-x"])
+        self.re_filter_combo.setMinimumWidth(150)
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Suche nach Kunde, Projekt, Mitarbeiter, Adresse, Auftrag, Bemerkung ...")
         self.search_input.setMinimumWidth(320)
@@ -355,6 +369,10 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.export_json_button)
         top_bar.addWidget(self.offer_editor_button)
         top_bar.addWidget(self.lexware_export_button)
+        top_bar.addWidget(QLabel("Belegtyp:"))
+        top_bar.addWidget(self.voucher_type_combo)
+        top_bar.addWidget(QLabel("Exportziel:"))
+        top_bar.addWidget(self.export_target_combo)
         top_bar.addWidget(QLabel("Mandant:"))
         top_bar.addWidget(self.mandant_combo)
         top_bar.addStretch()
@@ -363,6 +381,7 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(self.auto_filter_combo)
         filter_bar.addWidget(self.manual_filter_combo)
         filter_bar.addWidget(self.changed_filter_combo)
+        filter_bar.addWidget(self.re_filter_combo)
         filter_bar.addWidget(self.show_open_only_button)
         filter_bar.addWidget(self.show_all_manual_button)
         filter_bar.addWidget(self.search_input, 1)
@@ -554,6 +573,7 @@ class MainWindow(QMainWindow):
         self.auto_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.manual_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.changed_filter_combo.currentIndexChanged.connect(self.refresh_table)
+        self.re_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.search_input.textChanged.connect(self.refresh_table)
         self.table_widget.itemSelectionChanged.connect(self.on_table_selection_changed)
         self.table_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
@@ -2199,12 +2219,16 @@ class MainWindow(QMainWindow):
         introduction_widget = getattr(self, "draft_introduction_edit", None)
         remark_widget = getattr(self, "draft_remark_edit", None)
         payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+        voucher_type_widget = getattr(self, "voucher_type_combo", None)
+        export_target_widget = getattr(self, "export_target_combo", None)
 
         return {
             "title": title_widget.text().strip() if title_widget is not None else "Angebot",
             "introduction": introduction_widget.toPlainText().strip() if introduction_widget is not None else "Automatisch erzeugter Entwurf für das Angebot.",
             "remark": remark_widget.toPlainText().strip() if remark_widget is not None else "Erzeugt durch Rechnungsautomatismus",
             "payment_term_days": payment_term_widget.value() if payment_term_widget is not None else 14,
+            "voucher_type": str(voucher_type_widget.currentData() or "quotation") if voucher_type_widget is not None else "quotation",
+            "export_target": str(export_target_widget.currentData() or "draft") if export_target_widget is not None else "draft",
         }
 
     def _draft_templates_for_mandant(self) -> tuple[list[str], list[str]]:
@@ -2242,6 +2266,12 @@ class MainWindow(QMainWindow):
         return intro_templates, remark_templates
 
     def _current_voucher_type(self) -> str:
+        voucher_type_widget = getattr(self, "voucher_type_combo", None)
+        if voucher_type_widget is not None:
+            selected = str(voucher_type_widget.currentData() or "").strip().lower()
+            if selected in {"quotation", "invoice"}:
+                return selected
+
         service = getattr(self, "lexware_export_service", None)
         endpoint = str(getattr(service, "draft_endpoint", "") or "").lower()
         if "invoice" in endpoint:
@@ -2338,8 +2368,11 @@ class MainWindow(QMainWindow):
 
         current_title = self.draft_title_edit.text().strip()
         title_type_combo = QComboBox()
-        title_type_combo.addItem("Angebot", "Angebot")
-        title_type_combo.addItem("Rechnung", "Rechnung")
+        title_type_combo.addItem("Angebot", "quotation")
+        title_type_combo.addItem("Rechnung", "invoice")
+        export_target_combo = QComboBox()
+        export_target_combo.addItem("Als Draft ablegen", "draft")
+        export_target_combo.addItem("Finalisieren", "finalize")
         intro_templates, remark_templates = self._draft_templates_for_mandant()
 
         intro_template_combo = QComboBox()
@@ -2382,17 +2415,23 @@ class MainWindow(QMainWindow):
         if group is not None:
             project_name = str(group.get("projekt_roh", "") or "").strip()
 
-        initial_title_type = "Angebot"
-        if current_title.lower().startswith("rechnung"):
-            initial_title_type = "Rechnung"
+        initial_title_type = str(getattr(self, "voucher_type_combo", None).currentData() if getattr(self, "voucher_type_combo", None) is not None else "").strip()
+        if initial_title_type not in {"quotation", "invoice"}:
+            initial_title_type = "invoice" if current_title.lower().startswith("rechnung") else "quotation"
         title_type_index = title_type_combo.findData(initial_title_type)
         title_type_combo.setCurrentIndex(title_type_index if title_type_index >= 0 else 0)
+
+        initial_export_target = str(getattr(self, "export_target_combo", None).currentData() if getattr(self, "export_target_combo", None) is not None else "").strip()
+        if initial_export_target not in {"draft", "finalize"}:
+            initial_export_target = "draft"
+        export_target_index = export_target_combo.findData(initial_export_target)
+        export_target_combo.setCurrentIndex(export_target_index if export_target_index >= 0 else 0)
 
         title_preview_label = QLabel()
         title_preview_label.setWordWrap(True)
 
         def _refresh_title_preview() -> None:
-            title_type = str(title_type_combo.currentData() or "Angebot").strip()
+            title_type = "Angebot" if str(title_type_combo.currentData() or "quotation") == "quotation" else "Rechnung"
             suffix = f" - {project_name}" if project_name else ""
             title_preview_label.setText(f"{title_type}{suffix}")
 
@@ -2549,6 +2588,7 @@ class MainWindow(QMainWindow):
         payment_days.setSuffix(" Tage netto")
 
         form.addRow("Belegtyp", title_type_combo)
+        form.addRow("Exportziel", export_target_combo)
         form.addRow("Belegtitel", title_preview_label)
         form.addRow("Einleitung Vorlage", intro_template_combo)
         form.addRow("Einleitung", intro_edit)
@@ -2651,6 +2691,12 @@ class MainWindow(QMainWindow):
         self.draft_introduction_edit.setPlainText(intro_edit.toPlainText().strip())
         self.draft_remark_edit.setPlainText(remark_edit.toPlainText().strip())
         self.draft_payment_term_days_spin.setValue(int(payment_days.value()))
+        if getattr(self, "voucher_type_combo", None) is not None:
+            voucher_index = self.voucher_type_combo.findData(str(title_type_combo.currentData() or "quotation"))
+            self.voucher_type_combo.setCurrentIndex(voucher_index if voucher_index >= 0 else 0)
+        if getattr(self, "export_target_combo", None) is not None:
+            target_index = self.export_target_combo.findData(str(export_target_combo.currentData() or "draft"))
+            self.export_target_combo.setCurrentIndex(target_index if target_index >= 0 else 0)
 
         if group is not None:
             group["travel_mode"] = str(travel_mode_combo.currentData() or self._default_travel_mode_for_group(group))
@@ -2836,6 +2882,8 @@ class MainWindow(QMainWindow):
         lines = [
             f"{settings['title']}",
             "=" * max(len(settings["title"]), 9),
+            f"Belegtyp: {'Angebot' if settings.get('voucher_type') == 'quotation' else 'Rechnung'}",
+            f"Exportziel: {'Draft' if settings.get('export_target') != 'finalize' else 'Finalisiert'}",
             f"Einleitung: {settings['introduction']}",
             f"Nachbemerkung: {settings['remark']}",
             f"Zahlungsziel: {settings['payment_term_days']} Tage netto",
@@ -2890,6 +2938,8 @@ class MainWindow(QMainWindow):
         introduction_widget = getattr(self, "draft_introduction_edit", None)
         remark_widget = getattr(self, "draft_remark_edit", None)
         payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+        voucher_type_widget = getattr(self, "voucher_type_combo", None)
+        export_target_widget = getattr(self, "export_target_combo", None)
 
         if title_widget is not None:
             title_widget.setText("Angebot")
@@ -2899,6 +2949,12 @@ class MainWindow(QMainWindow):
             remark_widget.setPlainText("Erzeugt durch Rechnungsautomatismus")
         if payment_term_widget is not None:
             payment_term_widget.setValue(14)
+        if voucher_type_widget is not None:
+            idx = voucher_type_widget.findData("quotation")
+            voucher_type_widget.setCurrentIndex(idx if idx >= 0 else 0)
+        if export_target_widget is not None:
+            idx = export_target_widget.findData("draft")
+            export_target_widget.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _apply_draft_export_settings(self, settings: dict | None) -> None:
         if not isinstance(settings, dict):
@@ -2908,6 +2964,8 @@ class MainWindow(QMainWindow):
         introduction_widget = getattr(self, "draft_introduction_edit", None)
         remark_widget = getattr(self, "draft_remark_edit", None)
         payment_term_widget = getattr(self, "draft_payment_term_days_spin", None)
+        voucher_type_widget = getattr(self, "voucher_type_combo", None)
+        export_target_widget = getattr(self, "export_target_combo", None)
 
         if title_widget is not None:
             title = str(settings.get("title", "") or "").strip()
@@ -2930,6 +2988,18 @@ class MainWindow(QMainWindow):
                 payment_term_widget.setValue(max(int(raw_days), 0))
             except Exception:
                 pass
+
+        if voucher_type_widget is not None:
+            voucher_type = str(settings.get("voucher_type", "") or "").strip().lower()
+            if voucher_type in {"quotation", "invoice"}:
+                idx = voucher_type_widget.findData(voucher_type)
+                voucher_type_widget.setCurrentIndex(idx if idx >= 0 else 0)
+
+        if export_target_widget is not None:
+            export_target = str(settings.get("export_target", "") or "").strip().lower()
+            if export_target in {"draft", "finalize"}:
+                idx = export_target_widget.findData(export_target)
+                export_target_widget.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _apply_draft_defaults_for_mandant(self, mandant_id: str) -> None:
         mandant = self._get_mandant_by_id(mandant_id)
@@ -3742,7 +3812,13 @@ class MainWindow(QMainWindow):
             )
             return
 
-        is_quotation_mode = bool(getattr(self.lexware_export_service, "is_quotation_mode", lambda: False)())
+        export_settings = self._draft_export_settings()
+        voucher_type = str(export_settings.get("voucher_type", "quotation") or "quotation").strip().lower()
+        if voucher_type not in {"quotation", "invoice"}:
+            voucher_type = "quotation"
+        export_target = str(export_settings.get("export_target", "draft") or "draft").strip().lower()
+        finalize_export = export_target == "finalize"
+        is_quotation_mode = bool(getattr(self.lexware_export_service, "is_quotation_mode", lambda _voucher_type="": False)(voucher_type))
         already_exported = [g for g in selected_groups if self._is_already_exported(g)]
 
         export_mode = "create_new"
@@ -3865,6 +3941,8 @@ class MainWindow(QMainWindow):
             f"Mit Warnungen (Auswahl): {len(warning_groups)}\n"
             f"Ohne automatische Geokodierung: {len(geocode_unresolved_groups)}\n"
             f"Rundreisen automatisch verteilt: {roundtrip_tours_applied}\n"
+            f"Belegtyp: {'Angebot' if voucher_type == 'quotation' else 'Rechnung'}\n"
+            f"Exportziel: {'Finalisieren' if finalize_export else 'Draft'}\n"
             f"Modus: {'Überschreiben bestehender Angebote' if export_mode == 'overwrite' else 'Neue Entwürfe anlegen'}\n\n"
             + ("Lexware Konto-Kontext:\n" + "\n".join(account_context_lines) + "\n\n" if account_context_lines else "")
             + f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
@@ -3887,7 +3965,6 @@ class MainWindow(QMainWindow):
         overwritten_count = 0
         first_error = ""
         failed_previews: list[str] = []
-        export_settings = self._draft_export_settings()
 
         for group in export_candidates:
             mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
@@ -3904,6 +3981,8 @@ class MainWindow(QMainWindow):
                 payment_term_days=export_settings["payment_term_days"],
                 update_existing=should_overwrite,
                 export_reference=export_reference,
+                voucher_type=voucher_type,
+                finalize=finalize_export,
             )
 
             if result.get("success"):
@@ -4007,10 +4086,21 @@ class MainWindow(QMainWindow):
             return export_uri
         return str(group.get("lexware_export_id", "")).strip()
 
+    def _has_re_done_marker(self, group: dict) -> bool:
+        values = group.get("re_roh_liste", [])
+        if isinstance(values, str):
+            candidates = [x.strip().lower() for x in values.split(",") if x.strip()]
+        elif isinstance(values, list):
+            candidates = [str(x or "").strip().lower() for x in values]
+        else:
+            candidates = []
+        return any(value == "x" for value in candidates)
+
     def refresh_table(self) -> None:
         auto_filter_text = self.auto_filter_combo.currentText()
         manual_filter_text = self.manual_filter_combo.currentText()
         changed_filter_text = self.changed_filter_combo.currentText()
+        re_filter_text = self.re_filter_combo.currentText()
         search_text = self.search_input.text().strip().lower()
 
         if auto_filter_text == "Nur Einsätze":
@@ -4033,6 +4123,11 @@ class MainWindow(QMainWindow):
             filtered_groups = [g for g in filtered_groups if g.get("_last_changed_at", "")]
         elif changed_filter_text == "Nur ungeänderte":
             filtered_groups = [g for g in filtered_groups if not g.get("_last_changed_at", "")]
+
+        if re_filter_text == "Nur ohne RE-x":
+            filtered_groups = [g for g in filtered_groups if not self._has_re_done_marker(g)]
+        elif re_filter_text == "Nur mit RE-x":
+            filtered_groups = [g for g in filtered_groups if self._has_re_done_marker(g)]
 
         if search_text:
             visible_groups = [g for g in filtered_groups if search_text in self._build_search_text(g)]
