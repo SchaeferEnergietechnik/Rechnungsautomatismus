@@ -481,6 +481,7 @@ def test_lexware_export_summary_includes_warning_count(config_loader, contacts_i
                     "projekt_roh": "Projekt X",
                     "invoice_validation_errors": 0,
                     "invoice_validation_warnings": 1,
+                    "travel_km": 10.0,
                     "lexware_export_status": "",
                 }
             ]
@@ -511,6 +512,47 @@ def test_lexware_export_summary_includes_warning_count(config_loader, contacts_i
             info_mock.assert_called_once()
             info_text = info_mock.call_args.args[2]
             assert "Mit Warnungen (exportiert): 1" in info_text
+
+
+def test_lexware_export_with_missing_geocoding_requires_confirmation(config_loader, contacts_importer):
+    """Test: Export mit fehlender Geokodierung erfordert explizite Bestätigung."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.groups = [
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "adresse_roh": "Unbekannte Adresse 1",
+                    "invoice_validation_errors": 0,
+                    "invoice_validation_warnings": 0,
+                    "travel_km": 0.0,
+                    "lexware_export_status": "",
+                }
+            ]
+            window.visible_groups = window.groups
+            window._selected_groups = Mock(return_value=window.groups)
+            window._is_already_exported = Mock(return_value=False)
+            window._save_manual_data = Mock()
+            window._log_action = Mock()
+            window.refresh_table = Mock()
+            window._configure_lexware_service_for_mandant = Mock()
+            window._calculate_travel_km_for_group = Mock(return_value=False)
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+
+            with patch('gui.main_window.QMessageBox.question', return_value=65536):
+                window.export_selected_groups_to_lexware_draft()
+
+            window.lexware_export_service.is_configured.assert_called_once()
+            window.lexware_export_service.export_group_as_draft.assert_not_called()
 
 
 def test_draft_settings_survive_project_roundtrip(config_loader, contacts_importer, tmp_path):

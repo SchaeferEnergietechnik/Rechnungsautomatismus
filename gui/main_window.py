@@ -2993,6 +2993,39 @@ class MainWindow(QMainWindow):
                 )
                 return
 
+        geocode_unresolved_groups: list[dict] = []
+        for group in export_candidates:
+            if float(group.get("travel_km", 0.0) or 0.0) > 0:
+                continue
+            if self._calculate_travel_km_for_group(group, show_messages=False):
+                continue
+            geocode_unresolved_groups.append(group)
+
+        if geocode_unresolved_groups:
+            geocode_preview = []
+            for idx, group in enumerate(geocode_unresolved_groups[:10], start=1):
+                geocode_preview.append(
+                    f"{idx}. {self._format_date_for_display(group.get('datum', ''))} | "
+                    f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')} | "
+                    f"Adresse: {str(group.get('adresse_roh', '') or '').strip() or '-'}"
+                )
+            if len(geocode_unresolved_groups) > 10:
+                geocode_preview.append(f"... +{len(geocode_unresolved_groups) - 10} weitere")
+
+            geocode_decision = QMessageBox.question(
+                self,
+                "Export mit fehlender Geokodierung bestätigen",
+                "Bei einigen Gruppen konnte die Strecke nicht automatisch geokodiert werden.\n"
+                "Diese Gruppen werden mit den aktuell gesetzten Fahrtwerten exportiert (oft 0 km / 0 h).\n\n"
+                f"Betroffen: {len(geocode_unresolved_groups)} Gruppe(n)\n\n"
+                + "\n".join(geocode_preview)
+                + "\n\nTrotzdem exportieren?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if geocode_decision != QMessageBox.Yes:
+                return
+
         preview_lines = []
         for idx, group in enumerate(export_candidates[:12], start=1):
             preview_lines.append(
@@ -3007,6 +3040,7 @@ class MainWindow(QMainWindow):
             f"Wird exportiert: {len(export_candidates)} Gruppe(n)\n"
             f"Übersprungen (bereits exportiert): {skipped_count}\n\n"
             f"Mit Warnungen (Auswahl): {len(warning_groups)}\n"
+            f"Ohne automatische Geokodierung: {len(geocode_unresolved_groups)}\n"
             f"Modus: {'Überschreiben bestehender Angebote' if export_mode == 'overwrite' else 'Neue Entwürfe anlegen'}\n\n"
             f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
             "Jetzt exportieren?"
