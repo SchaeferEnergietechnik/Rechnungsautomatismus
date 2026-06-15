@@ -225,6 +225,58 @@ class TestInvoicePositionService:
         assert proposal.positions[0].title == "ET-1 - ET Service"
         assert proposal.positions[0].unit_price_net == 507.0
 
+    def test_multi_day_allowance_assignment_tag_1(self, position_service, sample_group):
+        proposal = InvoiceProposal(
+            source_group_key="test_key",
+            start_date="01.01.2026",
+            end_date="03.01.2026",
+            kw="1",
+            customer_raw="Energietechnik AG",
+            project_raw="Heizungsanlage",
+        )
+        sample_group["selected_articles"] = [
+            {
+                "Artikelnummer": "MT-1",
+                "Bezeichnung": "Mehrtagespauschale",
+                "Einheit": "Pauschale",
+                "Steuerart": "USt19",
+                "VK (Netto)": "100,00",
+            }
+        ]
+        sample_group["multi_day_allowance_assignment_rule"] = "tag_1"
+
+        position_service.enrich_proposal_with_positions(proposal, sample_group)
+
+        assert len(proposal.positions) == 1
+        assert "Mehrtagespauschale zugeordnet: Tag 1" in str(proposal.positions[0].description or "")
+        assert "01.01.2026" in str(proposal.positions[0].description or "")
+
+    def test_multi_day_allowance_assignment_tag_2(self, position_service, sample_group):
+        proposal = InvoiceProposal(
+            source_group_key="test_key",
+            start_date="01.01.2026",
+            end_date="03.01.2026",
+            kw="1",
+            customer_raw="Energietechnik AG",
+            project_raw="Heizungsanlage",
+        )
+        sample_group["selected_articles"] = [
+            {
+                "Artikelnummer": "MT-1",
+                "Bezeichnung": "Mehrtagespauschale",
+                "Einheit": "Pauschale",
+                "Steuerart": "USt19",
+                "VK (Netto)": "100,00",
+            }
+        ]
+        sample_group["multi_day_allowance_assignment_rule"] = "tag_2"
+
+        position_service.enrich_proposal_with_positions(proposal, sample_group)
+
+        assert len(proposal.positions) == 1
+        assert "Mehrtagespauschale zugeordnet: Tag 2" in str(proposal.positions[0].description or "")
+        assert "03.01.2026" in str(proposal.positions[0].description or "")
+
 
 class TestInvoiceValidationService:
     def test_validate_proposal_with_errors(self, validation_service):

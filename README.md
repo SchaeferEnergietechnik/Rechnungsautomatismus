@@ -27,7 +27,18 @@ Aktueller Funktionsstand:
 - Validierungsstatus ist in der GUI-Tabelle sichtbar.
 - Detailansicht zeigt Validierungsmeldungen und Rechnungspositionsvorschau.
 - Mapper nutzt `mandant_id` aus der Gruppe als Fallback (kein falscher Mandant-Fehler mehr).
-- Teststand: 71/71 Tests gruen (`pytest -q`).
+- Sammel-Export blockiert bei harten Validierungsfehlern.
+- Sammel-Export verlangt explizite Bestaetigung bei Warnungen und fehlender Geokodierung.
+- Export-Bestaetigung zeigt Lexware-Konto-Kontext je Mandant (Mandant/Base URL/Endpoint/Company-ID).
+- Rundreisen bei gleichem Kundentag mit mehreren Projekten werden verteilt:
+	- Segmentierung Firma -> Projekt 1 -> ... -> letztes Projekt -> Firma
+	- erste Rechnung = Anfahrt
+	- letzte Rechnung = inkl. Rueckfahrt
+	- Segmentrollen und Route/km/h in der Exportvorschau sichtbar
+- Kundenspezifische Artikelsatz-Vorlagen sind verfuegbar (speichern/anwenden, persistiert in Projekt/Sitzung/Statusdatei).
+- Schnellreferenz fuer Artikelauswahl ist aktiv (z. B. `1,4,7` mit Validierung und Duplikat-Schutz).
+- Wahlregeln fuer Weiterfahrt und Mehrtagespauschale (Tag 1 / Tag 2) sind im Dialog konfigurierbar und wirksam.
+- Teststand: 88/88 Tests gruen (`pytest -q`).
 
 Update 2026-06-15:
 - Stand aus `feature/mandant-specific-data` ist nach `main` gemerged.
@@ -88,6 +99,9 @@ Testmodus-Hinweis (Angebote statt Rechnungen):
 Wichtige API-Grenze laut offizieller Lexware-Doku:
 - Bestehende Invoices/Quotations sollen nicht ueber einen allgemeinen Listen-Dialog per API geladen werden.
 - Die Finalisierung ist fuer diese Belegtypen beim Erzeugen ueber `finalize=true` vorgesehen, nicht nachtraeglich per PUT/PATCH.
+
+Aktuell noch offen (naechster Ausbau):
+- PDF-Open/Download-Flow fuer bekannte Lexware-Beleg-ID
 
 Fahrtkostenlogik (MVP):
 - Startadresse: aktive Mandantenadresse aus `config/mandants.json`

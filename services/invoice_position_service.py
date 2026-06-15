@@ -150,7 +150,41 @@ class InvoicePositionService:
                 )
             )
 
+        self._apply_multi_day_allowance_assignment(group, positions)
+
         return positions
+
+    def _apply_multi_day_allowance_assignment(self, group: dict, positions: list[InvoicePosition]) -> None:
+        if not positions:
+            return
+
+        start_date = str(group.get("zeitraum_von", "") or group.get("datum", "") or "").strip()
+        end_date = str(group.get("zeitraum_bis", "") or group.get("datum", "") or "").strip()
+        if not start_date or not end_date or start_date == end_date:
+            return
+
+        rule = str(group.get("multi_day_allowance_assignment_rule", "tag_1") or "tag_1").strip().lower()
+        if rule not in {"tag_1", "tag_2"}:
+            rule = "tag_1"
+
+        target_day = start_date if rule == "tag_1" else end_date
+        day_label = "Tag 1" if rule == "tag_1" else "Tag 2"
+        assignment_text = f"Mehrtagespauschale zugeordnet: {day_label} ({target_day})"
+
+        for position in positions:
+            title = str(getattr(position, "title", "") or "").strip().lower()
+            if "mehrtages" not in title:
+                continue
+
+            existing_description = str(getattr(position, "description", "") or "").strip()
+            if assignment_text in existing_description:
+                continue
+
+            position.description = (
+                (existing_description + "\n" + assignment_text).strip()
+                if existing_description
+                else assignment_text
+            )
 
     def _apply_travel_costs(self, group: dict, positions: list[InvoicePosition]) -> None:
         travel_amount = self._travel_amount(group)

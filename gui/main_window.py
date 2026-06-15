@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QInputDialog,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -92,6 +93,7 @@ class MainWindow(QMainWindow):
         self.last_action: dict | None = None
         self.change_log: list[str] = []
         self.current_articles: list[dict] = []
+        self.customer_article_templates: dict[str, list[dict]] = {}
         
         self.mandants: list[dict] = self._load_mandants()
         self.active_mandant_id: str = self.mandants[0]["id"] if self.mandants else ""
@@ -130,9 +132,19 @@ class MainWindow(QMainWindow):
         self.article_add_button = QPushButton("Artikel hinzufügen")
         self.article_remove_button = QPushButton("Artikel entfernen")
         self.article_clear_button = QPushButton("Artikel leeren")
+        self.article_template_combo = QComboBox()
+        self.article_template_combo.setMinimumWidth(320)
+        self.article_template_save_button = QPushButton("Artikelsatz speichern")
+        self.article_template_apply_button = QPushButton("Vorlage anwenden")
+        self.article_quick_select_input = QLineEdit()
+        self.article_quick_select_input.setPlaceholderText("Schnellreferenz: z.B. 1,4,7")
+        self.article_quick_select_apply_button = QPushButton("Referenz anwenden")
         self.article_add_button.clicked.connect(self.add_selected_article_to_group)
         self.article_remove_button.clicked.connect(self.remove_selected_article_from_group)
         self.article_clear_button.clicked.connect(self.clear_selected_articles_for_group)
+        self.article_template_save_button.clicked.connect(self.save_article_template_for_group)
+        self.article_template_apply_button.clicked.connect(self.apply_selected_article_template_to_group)
+        self.article_quick_select_apply_button.clicked.connect(self.apply_quick_article_reference_for_group)
 
         self.article_list_widget = QListWidget()
         self.article_list_widget.setMinimumHeight(140)
@@ -413,6 +425,17 @@ class MainWindow(QMainWindow):
         article_button_bar.addWidget(self.article_remove_button)
         article_button_bar.addWidget(self.article_clear_button)
         article_bar.addLayout(article_button_bar)
+        article_template_bar = QHBoxLayout()
+        article_template_bar.setSpacing(6)
+        article_template_bar.addWidget(self.article_template_combo)
+        article_template_bar.addWidget(self.article_template_save_button)
+        article_template_bar.addWidget(self.article_template_apply_button)
+        article_bar.addLayout(article_template_bar)
+        article_quick_select_bar = QHBoxLayout()
+        article_quick_select_bar.setSpacing(6)
+        article_quick_select_bar.addWidget(self.article_quick_select_input)
+        article_quick_select_bar.addWidget(self.article_quick_select_apply_button)
+        article_bar.addLayout(article_quick_select_bar)
         article_bar.addWidget(self.article_list_widget)
         article_bar.addWidget(self.article_summary_label)
         article_price_row = QHBoxLayout()
@@ -548,6 +571,7 @@ class MainWindow(QMainWindow):
 
         self._refresh_articles_for_mandant(self.active_mandant_id)
         self._apply_draft_defaults_for_mandant(self.active_mandant_id)
+        self._refresh_article_template_combo_for_group(None)
 
     def _log_action(self, text: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -891,6 +915,236 @@ class MainWindow(QMainWindow):
             )
         return True
 
+    def _tour_customer_key(self, group: dict) -> str:
+        customer_number = str(group.get("customer_match_number", "") or "").strip().lower()
+        if customer_number:
+            return f"nr:{customer_number}"
+
+        customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "")).strip().lower()
+        return f"name:{customer_name}"
+
+    def _tour_day_key(self, group: dict) -> str:
+        parsed = self._parse_date(str(group.get("datum", "") or ""))
+        if parsed == datetime.max:
+            return str(group.get("datum", "") or "").strip()
+        return parsed.date().isoformat()
+
+    def _apply_roundtrip_distribution_for_groups(self, groups: list[dict]) -> int:
+        """Verteilt Fahrten bei gleichem Kundentag auf mehrere Projektgruppen.
+
+        Regel: Firma -> 1. Adresse -> ... -> letzte Adresse -> Firma.
+        Die Hinfahrt liegt damit auf der ersten Rechnung, die Rueckfahrt auf der letzten.
+        """
+        if not groups:
+            return 0
+
+        groups_by_tour_key: dict[tuple[str, str, str], list[dict]] = {}
+        order_map = {id(group): idx for idx, group in enumerate(groups)}
+
+        for group in groups:
+            mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
+            tour_key = (mandant_id, self._tour_day_key(group), self._tour_customer_key(group))
+            groups_by_tour_key.setdefault(tour_key, []).append(group)
+
+        applied_tours = 0
+        for (mandant_id, _day_key, _customer_key), cluster in groups_by_tour_key.items():
+            if len(cluster) < 2:
+                continue
+
+            distinct_projects = {
+                str(group.get("projekt_roh", "") or "").strip().lower()
+                for group in cluster
+                if str(group.get("projekt_roh", "") or "").strip()
+            }
+            if len(distinct_projects) < 2:
+                continue
+
+            # Manuelle Werte sollen nicht stillschweigend ueberschrieben werden.
+            if any(
+                float(group.get("travel_km", 0.0) or 0.0) > 0.0 or float(group.get("travel_hours", 0.0) or 0.0) > 0.0
+                for group in cluster
+            ):
+                continue
+
+            ordered_cluster = sorted(
+                cluster,
+                key=lambda group: (
+                    self._parse_date(str(group.get("datum", "") or "")),
+                    order_map.get(id(group), 999999),
+                    str(group.get("projekt_roh", "") or "").strip().lower(),
+                ),
+            )
+
+            if self._apply_roundtrip_distribution_for_ordered_groups(ordered_cluster, mandant_id):
+                applied_tours += 1
+
+        return applied_tours
+
+    def _apply_roundtrip_distribution_for_ordered_groups(self, ordered_groups: list[dict], mandant_id: str) -> bool:
+        if not ordered_groups:
+            return False
+
+        origin = self._mandant_full_address(mandant_id)
+        if not origin:
+            return False
+
+        origin_coords = self._geocode_address(origin)
+        if origin_coords is None:
+            return False
+
+        destinations: list[tuple[dict, str, tuple[float, float]]] = []
+        for group in ordered_groups:
+            destination = str(group.get("adresse_roh", "") or "").strip()
+            if not destination:
+                return False
+            destination_coords = self._geocode_address(destination)
+            if destination_coords is None:
+                return False
+            destinations.append((group, destination, destination_coords))
+
+        last_index = len(destinations) - 1
+
+        leg_infos: list[dict] = []
+        # Outbound: Firma -> erstes Projekt
+        first_destination = destinations[0]
+        outbound_metrics = self._route_metrics(origin_coords, first_destination[2])
+        if outbound_metrics is None:
+            return False
+        outbound_km, outbound_hours = outbound_metrics
+        if outbound_km <= 0 or outbound_hours <= 0:
+            return False
+        leg_infos.append({
+            "type": "outbound",
+            "from": origin,
+            "to": first_destination[1],
+            "km": float(outbound_km),
+            "hours": float(outbound_hours),
+        })
+
+        # Zwischenfahrten: Projekt i -> Projekt i+1
+        for idx in range(len(destinations) - 1):
+            from_destination = destinations[idx]
+            to_destination = destinations[idx + 1]
+            forward_metrics = self._route_metrics(from_destination[2], to_destination[2])
+            if forward_metrics is None:
+                return False
+            forward_km, forward_hours = forward_metrics
+            if forward_km <= 0 or forward_hours <= 0:
+                return False
+            leg_infos.append({
+                "type": "forward",
+                "from": from_destination[1],
+                "to": to_destination[1],
+                "km": float(forward_km),
+                "hours": float(forward_hours),
+            })
+
+        # Return: letztes Projekt -> Firma
+        last_destination = destinations[last_index]
+        return_metrics = self._route_metrics(last_destination[2], origin_coords)
+        if return_metrics is None:
+            return False
+        return_km, return_hours = return_metrics
+        if return_km <= 0 or return_hours <= 0:
+            return False
+        leg_infos.append({
+            "type": "return",
+            "from": last_destination[1],
+            "to": f"{origin} (inkl. Rueckfahrt zur Firma)",
+            "km": float(return_km),
+            "hours": float(return_hours),
+        })
+
+        # Verteilregel: Zwischenfahrten auf Tag 1 oder Tag 2 buchen.
+        forward_rule = str(
+            ordered_groups[0].get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+            or self._default_travel_forward_assignment_rule()
+        ).strip().lower()
+        if forward_rule not in {"tag_1", "tag_2"}:
+            forward_rule = self._default_travel_forward_assignment_rule()
+
+        per_invoice_segments: list[list[dict]] = [[] for _ in destinations]
+
+        # Outbound immer auf erste Rechnung.
+        per_invoice_segments[0].append(leg_infos[0])
+
+        # Zwischenfahrten je nach Regel verteilen.
+        forward_legs = [leg for leg in leg_infos if leg.get("type") == "forward"]
+        if forward_rule == "tag_1":
+            for idx, leg in enumerate(forward_legs):
+                per_invoice_segments[idx].append(leg)
+        else:
+            for idx, leg in enumerate(forward_legs, start=1):
+                per_invoice_segments[idx].append(leg)
+
+        # Rueckfahrt immer auf letzte Rechnung.
+        per_invoice_segments[last_index].append(leg_infos[-1])
+
+        for idx, (group, destination, _destination_coords) in enumerate(destinations):
+            self._ensure_travel_fields_for_group(group)
+            segments = per_invoice_segments[idx]
+            if not segments:
+                return False
+
+            total_km = sum(float(segment.get("km", 0.0) or 0.0) for segment in segments)
+            total_hours = sum(float(segment.get("hours", 0.0) or 0.0) for segment in segments)
+            if total_km <= 0 or total_hours <= 0:
+                return False
+
+            group["travel_km"] = float(total_km)
+            group["travel_hours"] = round(float(total_hours), 2)
+            group["travel_route_origin"] = str(segments[0].get("from", "") or origin)
+            group["travel_route_destination"] = str(segments[-1].get("to", "") or destination)
+            group["travel_route_segments"] = [
+                f"{str(seg.get('from', '') or '-')} -> {str(seg.get('to', '') or '-')}"
+                for seg in segments
+            ]
+
+            if idx == 0:
+                group["travel_segment_role"] = "first_invoice_outbound"
+            elif idx == last_index:
+                group["travel_segment_role"] = "last_invoice_with_return"
+            else:
+                group["travel_segment_role"] = "middle_invoice"
+
+        return True
+
+    def _travel_segment_preview_text(self, group: dict) -> str:
+        origin = str(group.get("travel_route_origin", "") or "").strip()
+        destination = str(group.get("travel_route_destination", "") or "").strip()
+        if not origin and not destination:
+            return ""
+
+        route_segments = group.get("travel_route_segments", [])
+        route_text = ""
+        if isinstance(route_segments, list) and route_segments:
+            cleaned_segments = [str(segment).strip() for segment in route_segments if str(segment).strip()]
+            if cleaned_segments:
+                route_text = " | ".join(cleaned_segments)
+        if not route_text:
+            route_text = f"{origin or '-'} -> {destination or '-'}"
+
+        km = float(group.get("travel_km", 0.0) or 0.0)
+        hours = float(group.get("travel_hours", 0.0) or 0.0)
+        role = str(group.get("travel_segment_role", "") or "").strip().lower()
+        role_prefix = ""
+        if role == "first_invoice_outbound":
+            role_prefix = "Erste Rechnung (Anfahrt): "
+        elif role == "last_invoice_with_return":
+            role_prefix = "Letzte Rechnung (inkl. Rueckfahrt): "
+        elif role == "middle_invoice":
+            role_prefix = "Zwischenrechnung: "
+        return (
+            f"{role_prefix}Route: {route_text}"
+            f" | {int(round(km))} km | {hours:.2f} h"
+        )
+
+    def _default_travel_forward_assignment_rule(self) -> str:
+        return "tag_2"
+
+    def _default_multi_day_allowance_assignment_rule(self) -> str:
+        return "tag_1"
+
     def _article_key(self, article: dict) -> str:
         article_number = str((article or {}).get("Artikelnummer", "") or (article or {}).get("Artikelnummer ", "")).strip()
         if article_number:
@@ -998,6 +1252,253 @@ class MainWindow(QMainWindow):
             return [dict(single_article)]
 
         return []
+
+    def _current_customer_template_key(self, group: dict | None) -> str:
+        if not isinstance(group, dict):
+            return ""
+
+        customer_number = str(group.get("customer_match_number", "") or "").strip().lower()
+        if customer_number:
+            return f"nr:{customer_number}"
+
+        customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "") or "").strip().lower()
+        customer_name = re.sub(r"\s+", " ", customer_name)
+        if customer_name:
+            return f"name:{customer_name}"
+        return ""
+
+    def _customer_templates_for_mandant(self, mandant_id: str) -> list[dict]:
+        if not isinstance(getattr(self, "customer_article_templates", None), dict):
+            self.customer_article_templates = {}
+
+        templates = self.customer_article_templates.get(mandant_id)
+        if isinstance(templates, list):
+            return templates
+        self.customer_article_templates[mandant_id] = []
+        return self.customer_article_templates[mandant_id]
+
+    def _label_for_template_key(self, group: dict | None) -> str:
+        if not isinstance(group, dict):
+            return "Unbekannter Kunde"
+
+        customer_number = str(group.get("customer_match_number", "") or "").strip()
+        customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "") or "").strip() or "Unbekannter Kunde"
+        if customer_number:
+            return f"{customer_name} (Nr. {customer_number})"
+        return customer_name
+
+    def _refresh_article_template_combo_for_group(self, group: dict | None) -> None:
+        combo = getattr(self, "article_template_combo", None)
+        apply_button = getattr(self, "article_template_apply_button", None)
+        save_button = getattr(self, "article_template_save_button", None)
+        if combo is None:
+            return
+
+        combo.blockSignals(True)
+        combo.clear()
+
+        if group is None:
+            combo.addItem("Keine Vorlage (Gruppe wählen)", -1)
+            combo.blockSignals(False)
+            if apply_button is not None:
+                apply_button.setEnabled(False)
+            if save_button is not None:
+                save_button.setEnabled(False)
+            return
+
+        customer_key = self._current_customer_template_key(group)
+        templates = self._customer_templates_for_mandant(self.active_mandant_id)
+        matching_templates = [
+            tpl for tpl in templates
+            if str((tpl or {}).get("customer_key", "") or "").strip() == customer_key
+        ]
+
+        if not matching_templates:
+            combo.addItem("Keine Artikelsatz-Vorlage für diesen Kunden", -1)
+        else:
+            for idx, template in enumerate(matching_templates):
+                template_name = str((template or {}).get("name", "") or "").strip() or f"Vorlage {idx + 1}"
+                articles = (template or {}).get("articles", [])
+                count = len(articles) if isinstance(articles, list) else 0
+                combo.addItem(f"{template_name} ({count} Artikel)", idx)
+
+        combo.blockSignals(False)
+        if apply_button is not None:
+            apply_button.setEnabled(bool(matching_templates))
+        if save_button is not None:
+            save_button.setEnabled(True)
+
+    def _resolve_articles_from_reference(self, reference_text: str) -> tuple[list[dict], list[str]]:
+        text = str(reference_text or "").strip()
+        if not text:
+            return [], []
+
+        tokens = [token.strip() for token in re.split(r"[,;\s]+", text) if token.strip()]
+        if not tokens:
+            return [], []
+
+        resolved: list[dict] = []
+        invalid: list[str] = []
+        seen_indexes: set[int] = set()
+
+        for token in tokens:
+            if not token.isdigit():
+                invalid.append(token)
+                continue
+
+            number = int(token)
+            if number <= 0:
+                invalid.append(token)
+                continue
+
+            index = number - 1
+            if index >= len(self.current_articles):
+                invalid.append(token)
+                continue
+
+            if index in seen_indexes:
+                continue
+
+            seen_indexes.add(index)
+            resolved.append(dict(self.current_articles[index]))
+
+        return resolved, invalid
+
+    def save_article_template_for_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        articles = self._selected_articles_for_group(group)
+        if not articles:
+            QMessageBox.information(self, "Artikelsatz", "Für diese Gruppe sind keine Artikel ausgewählt.")
+            return
+
+        customer_key = self._current_customer_template_key(group)
+        if not customer_key:
+            QMessageBox.warning(self, "Artikelsatz", "Kunde konnte nicht eindeutig bestimmt werden.")
+            return
+
+        suggested_name = f"{str(group.get('projekt_roh', '') or '').strip() or 'Standard'}"
+        template_name, ok = QInputDialog.getText(self, "Artikelsatz speichern", "Vorlagenname", text=suggested_name)
+        if not ok:
+            return
+
+        template_name = str(template_name or "").strip()
+        if not template_name:
+            QMessageBox.warning(self, "Artikelsatz", "Bitte einen Vorlagennamen eingeben.")
+            return
+
+        templates = self._customer_templates_for_mandant(self.active_mandant_id)
+        customer_label = self._label_for_template_key(group)
+
+        existing = None
+        for template in templates:
+            if (
+                str(template.get("customer_key", "") or "").strip() == customer_key
+                and str(template.get("name", "") or "").strip().lower() == template_name.lower()
+            ):
+                existing = template
+                break
+
+        if existing is not None:
+            existing["articles"] = [dict(article) for article in articles if isinstance(article, dict)]
+            existing["customer_label"] = customer_label
+            self._log_action(f"Artikelsatz aktualisiert | {customer_label} | {template_name}")
+        else:
+            templates.append({
+                "name": template_name,
+                "customer_key": customer_key,
+                "customer_label": customer_label,
+                "articles": [dict(article) for article in articles if isinstance(article, dict)],
+            })
+            self._log_action(f"Artikelsatz gespeichert | {customer_label} | {template_name}")
+
+        self._save_manual_data()
+        self._refresh_article_template_combo_for_group(group)
+
+    def apply_selected_article_template_to_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        combo = getattr(self, "article_template_combo", None)
+        if combo is None:
+            return
+
+        selected_data = combo.currentData()
+        try:
+            selected_index = int(selected_data)
+        except Exception:
+            selected_index = -1
+        if selected_index < 0:
+            return
+
+        customer_key = self._current_customer_template_key(group)
+        templates = self._customer_templates_for_mandant(self.active_mandant_id)
+        matching_templates = [
+            tpl for tpl in templates
+            if str((tpl or {}).get("customer_key", "") or "").strip() == customer_key
+        ]
+
+        if not (0 <= selected_index < len(matching_templates)):
+            return
+
+        template = matching_templates[selected_index]
+        articles = template.get("articles", [])
+        if not isinstance(articles, list) or not articles:
+            return
+
+        self._set_selected_articles_for_group(group, [dict(article) for article in articles if isinstance(article, dict)])
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+        self._log_action(
+            f"Artikelsatz angewendet | {self._label_for_template_key(group)} | {str(template.get('name', '') or '').strip()}"
+        )
+
+    def apply_quick_article_reference_for_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        input_widget = getattr(self, "article_quick_select_input", None)
+        if input_widget is None:
+            return
+
+        reference_text = str(input_widget.text() or "").strip()
+        if not reference_text:
+            QMessageBox.information(self, "Schnellreferenz", "Bitte Referenz eingeben (z.B. 1,4,7).")
+            return
+
+        resolved_articles, invalid_tokens = self._resolve_articles_from_reference(reference_text)
+        if not resolved_articles:
+            max_index = len(self.current_articles)
+            QMessageBox.warning(
+                self,
+                "Schnellreferenz",
+                f"Keine gültigen Referenzen gefunden. Verfügbar: 1 bis {max_index}.",
+            )
+            return
+
+        self._set_selected_articles_for_group(group, resolved_articles)
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+
+        if invalid_tokens:
+            QMessageBox.information(
+                self,
+                "Schnellreferenz",
+                "Gültige Referenzen wurden übernommen. "
+                f"Ignoriert: {', '.join(invalid_tokens)}",
+            )
+
+        self._log_action(
+            f"Schnellreferenz angewendet | {self._label_for_template_key(group)} | {reference_text}"
+        )
 
     def _set_selected_articles_for_group(self, group: dict, articles: list[dict]) -> None:
         normalized_articles = [dict(article) for article in articles if isinstance(article, dict)]
@@ -1222,6 +1723,8 @@ class MainWindow(QMainWindow):
         self._sync_article_price_editor_from_group(group)
 
     def _refresh_article_editor_for_group(self, group: dict | None) -> None:
+        quick_input = getattr(self, "article_quick_select_input", None)
+        quick_button = getattr(self, "article_quick_select_apply_button", None)
         if group is None:
             self.article_combo.blockSignals(True)
             self.article_combo.setCurrentIndex(0)
@@ -1233,6 +1736,12 @@ class MainWindow(QMainWindow):
                 article_list_widget.blockSignals(False)
             self._update_article_summary(None)
             self._sync_article_price_editor_from_group(None)
+            self._refresh_article_template_combo_for_group(None)
+            if quick_input is not None:
+                quick_input.clear()
+                quick_input.setEnabled(False)
+            if quick_button is not None:
+                quick_button.setEnabled(False)
             return
 
         self._sync_article_list_widget(group)
@@ -1249,6 +1758,13 @@ class MainWindow(QMainWindow):
             self.article_combo.blockSignals(False)
         self._update_article_summary(group)
         self._sync_article_price_editor_from_group(group)
+        self._refresh_article_template_combo_for_group(group)
+        if quick_input is not None:
+            quick_input.setEnabled(True)
+            max_index = max(len(self.current_articles), 1)
+            quick_input.setPlaceholderText(f"Schnellreferenz: 1-{max_index} (z.B. 1,4,7)")
+        if quick_button is not None:
+            quick_button.setEnabled(bool(self.current_articles))
 
     def _refresh_group_view_after_article_change(self, group: dict) -> None:
         self._refresh_group_invoice_proposal(group)
@@ -1338,6 +1854,37 @@ class MainWindow(QMainWindow):
         base_url = str(getattr(service, "base_url", "") or "").strip()
         if not token_url and base_url:
             service.token_url = f"{base_url.rstrip('/')}/oauth/token"
+
+    def _lexware_context_for_mandant(self, mandant_id: str) -> dict:
+        self._configure_lexware_service_for_mandant(mandant_id)
+        service = getattr(self, "lexware_export_service", None)
+        mandant = self._get_mandant_by_id(mandant_id) or {}
+
+        return {
+            "mandant_id": str(mandant_id or "").strip(),
+            "mandant_name": str(mandant.get("display_name", "") or mandant_id or "").strip(),
+            "base_url": str(getattr(service, "base_url", "") or "").strip(),
+            "draft_endpoint": str(getattr(service, "draft_endpoint", "") or "").strip(),
+            "company_id": self._get_lexware_company_id_for_mandant(mandant_id),
+        }
+
+    def _lexware_context_lines_for_groups(self, groups: list[dict]) -> list[str]:
+        mandant_ids: list[str] = []
+        for group in groups:
+            mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
+            if mandant_id and mandant_id not in mandant_ids:
+                mandant_ids.append(mandant_id)
+
+        lines: list[str] = []
+        for mandant_id in mandant_ids:
+            context = self._lexware_context_for_mandant(mandant_id)
+            base_url = context.get("base_url") or "-"
+            endpoint = context.get("draft_endpoint") or "-"
+            company_id = context.get("company_id") or "-"
+            lines.append(
+                f"- {context.get('mandant_name', mandant_id)} | Base URL: {base_url} | Endpoint: {endpoint} | Company-ID: {company_id}"
+            )
+        return lines
 
     def _apply_customer_matching_for_mandant(self, mandant_id: str) -> None:
         """Wendet Customer-Matching auf alle Gruppen für den aktiven Mandanten an."""
@@ -1455,6 +2002,7 @@ class MainWindow(QMainWindow):
         self._apply_customer_matching_for_mandant(mandant_id)
         self._refresh_articles_for_mandant(mandant_id)
         self._apply_draft_defaults_for_mandant(mandant_id)
+        self._refresh_article_template_combo_for_group(self._current_group_for_article_editing())
         self._save_manual_data()
         self._log_action(f"Mandant gewechselt | {self._get_mandant_by_id(mandant_id).get('display_name', mandant_id)}")
         self.refresh_table()
@@ -1954,6 +2502,30 @@ class MainWindow(QMainWindow):
                 w.setEnabled(False)
 
         form.addRow("Fahrtkostenmodus", travel_mode_combo)
+        travel_forward_assignment_combo = QComboBox()
+        travel_forward_assignment_combo.addItem("Weiterfahrt auf Tag 1", "tag_1")
+        travel_forward_assignment_combo.addItem("Weiterfahrt auf Tag 2", "tag_2")
+
+        multi_day_allowance_assignment_combo = QComboBox()
+        multi_day_allowance_assignment_combo.addItem("Mehrtagespauschale auf Tag 1", "tag_1")
+        multi_day_allowance_assignment_combo.addItem("Mehrtagespauschale auf Tag 2", "tag_2")
+
+        if group is not None:
+            forward_rule = str(group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()) or self._default_travel_forward_assignment_rule())
+            forward_index = travel_forward_assignment_combo.findData(forward_rule)
+            travel_forward_assignment_combo.setCurrentIndex(forward_index if forward_index >= 0 else 1)
+
+            allowance_rule = str(group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()) or self._default_multi_day_allowance_assignment_rule())
+            allowance_index = multi_day_allowance_assignment_combo.findData(allowance_rule)
+            multi_day_allowance_assignment_combo.setCurrentIndex(allowance_index if allowance_index >= 0 else 0)
+        else:
+            travel_forward_assignment_combo.setCurrentIndex(1)
+            multi_day_allowance_assignment_combo.setCurrentIndex(0)
+            travel_forward_assignment_combo.setEnabled(False)
+            multi_day_allowance_assignment_combo.setEnabled(False)
+
+        form.addRow("Weiterfahrt-Zuordnung", travel_forward_assignment_combo)
+        form.addRow("Mehrtagespauschale-Zuordnung", multi_day_allowance_assignment_combo)
         form.addRow("Fahrtstunden", travel_hours)
         form.addRow("Kilometer", travel_km)
         form.addRow("Stundensatz", travel_hour_rate)
@@ -1984,6 +2556,12 @@ class MainWindow(QMainWindow):
 
         if group is not None:
             group["travel_mode"] = str(travel_mode_combo.currentData() or self._default_travel_mode_for_group(group))
+            group["travel_forward_assignment_rule"] = str(
+                travel_forward_assignment_combo.currentData() or self._default_travel_forward_assignment_rule()
+            )
+            group["multi_day_allowance_assignment_rule"] = str(
+                multi_day_allowance_assignment_combo.currentData() or self._default_multi_day_allowance_assignment_rule()
+            )
             group["travel_hours"] = float(travel_hours.value())
             group["travel_km"] = float(travel_km.value())
             group["travel_hour_rate"] = float(travel_hour_rate.value())
@@ -2004,6 +2582,8 @@ class MainWindow(QMainWindow):
     def _ensure_travel_fields_for_group(self, group: dict) -> None:
         default_mode = self._default_travel_mode_for_group(group)
         group.setdefault("travel_mode", default_mode)
+        group.setdefault("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+        group.setdefault("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
         group.setdefault("travel_hours", 0.0)
         group.setdefault("travel_km", 0.0)
         group.setdefault("travel_hour_rate", 150.0)
@@ -2098,6 +2678,8 @@ class MainWindow(QMainWindow):
                 f"Projekt: {group.get('projekt_roh', '')}",
                 f"Positionen: {article_count if article_count else 1}",
                 f"Fahrtkostenmodus: {group.get('travel_mode', self._default_travel_mode_for_group(group))}",
+                f"Weiterfahrt-Zuordnung: {group.get('travel_forward_assignment_rule', self._default_travel_forward_assignment_rule())}",
+                f"Mehrtagespauschale-Zuordnung: {group.get('multi_day_allowance_assignment_rule', self._default_multi_day_allowance_assignment_rule())}",
                 f"Fahrtstunden: {group.get('travel_hours', 0.0)}",
                 f"Fahrtkilometer: {group.get('travel_km', 0.0)}",
                 f"Stundensatz: {group.get('travel_hour_rate', 150.0)} EUR",
@@ -2245,6 +2827,8 @@ class MainWindow(QMainWindow):
             "lexware_export_resource_uri": group.get("lexware_export_resource_uri", ""),
             "lexware_exported_at": group.get("lexware_exported_at", ""),
             "travel_mode": group.get("travel_mode", ""),
+            "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
+            "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
             "travel_hours": group.get("travel_hours", 0.0),
             "travel_km": group.get("travel_km", 0.0),
             "travel_hour_rate": group.get("travel_hour_rate", 150.0),
@@ -2270,6 +2854,8 @@ class MainWindow(QMainWindow):
                 group["lexware_export_resource_uri"] = state_map[key].get("lexware_export_resource_uri", "")
                 group["lexware_exported_at"] = state_map[key].get("lexware_exported_at", "")
                 group["travel_mode"] = state_map[key].get("travel_mode", self._default_travel_mode_for_group(group))
+                group["travel_forward_assignment_rule"] = state_map[key].get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+                group["multi_day_allowance_assignment_rule"] = state_map[key].get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
                 group["travel_hours"] = float(state_map[key].get("travel_hours", 0.0) or 0.0)
                 group["travel_km"] = float(state_map[key].get("travel_km", 0.0) or 0.0)
                 group["travel_hour_rate"] = float(state_map[key].get("travel_hour_rate", 150.0) or 150.0)
@@ -2601,7 +3187,12 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        project_data = {"source_file": self.current_file_path, "groups": {}, "draft_settings": self._draft_export_settings()}
+        project_data = {
+            "source_file": self.current_file_path,
+            "groups": {},
+            "draft_settings": self._draft_export_settings(),
+            "customer_article_templates": getattr(self, "customer_article_templates", {}),
+        }
         for group in self.groups:
             key = self._build_group_key(group)
             project_data["groups"][key] = {
@@ -2611,6 +3202,8 @@ class MainWindow(QMainWindow):
                 "selected_article_key": group.get("selected_article_key", ""),
                 "selected_article": group.get("selected_article", {}),
                 "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
+                "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
+                "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
                 "travel_hours": group.get("travel_hours", 0.0),
                 "travel_km": group.get("travel_km", 0.0),
                 "travel_hour_rate": group.get("travel_hour_rate", 150.0),
@@ -2643,6 +3236,7 @@ class MainWindow(QMainWindow):
             "source_file": self.current_file_path,
             "active_mandant_id": self.active_mandant_id,
             "draft_settings": self._draft_export_settings(),
+            "customer_article_templates": getattr(self, "customer_article_templates", {}),
             "groups": {},
             "change_log": self.change_log,
             "saved_at": datetime.now().isoformat(),
@@ -2657,6 +3251,8 @@ class MainWindow(QMainWindow):
                 "selected_article_key": group.get("selected_article_key", ""),
                 "selected_article": group.get("selected_article", {}),
                 "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
+                "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
+                "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
                 "travel_hours": group.get("travel_hours", 0.0),
                 "travel_km": group.get("travel_km", 0.0),
                 "travel_hour_rate": group.get("travel_hour_rate", 150.0),
@@ -2689,6 +3285,7 @@ class MainWindow(QMainWindow):
         source_file = session_data.get("source_file", "")
         group_data = session_data.get("groups", {})
         draft_settings = session_data.get("draft_settings", {})
+        loaded_templates = session_data.get("customer_article_templates", {})
         saved_mandant_id = session_data.get("active_mandant_id", "")
         
         if not source_file:
@@ -2709,6 +3306,7 @@ class MainWindow(QMainWindow):
         self._set_default_draft_export_settings()
         self._apply_draft_defaults_for_mandant(self.active_mandant_id)
         self._apply_draft_export_settings(draft_settings)
+        self._set_customer_article_templates(loaded_templates)
         self._update_draft_preview()
 
         for group in self.groups:
@@ -2726,6 +3324,8 @@ class MainWindow(QMainWindow):
                         group["selected_article_key"] = entry.get("selected_article_key", "")
                     group["_last_changed_at"] = entry.get("_last_changed_at", "")
                     group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
+                    group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+                    group["multi_day_allowance_assignment_rule"] = entry.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
                     group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
                     group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
                     group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
@@ -2743,6 +3343,7 @@ class MainWindow(QMainWindow):
         self._save_manual_data()
         self.last_action = None
         self.refresh_table()
+        self._refresh_article_template_combo_for_group(self._current_group_for_article_editing())
         self.log_view.setPlainText("\n".join(self.change_log))
         self._log_action(f"Sitzung geladen | {file_path}")
 
@@ -2757,6 +3358,7 @@ class MainWindow(QMainWindow):
         source_file = project_data.get("source_file", "")
         group_data = project_data.get("groups", {})
         draft_settings = project_data.get("draft_settings", {})
+        loaded_templates = project_data.get("customer_article_templates", {})
         if not source_file:
             return
 
@@ -2764,6 +3366,7 @@ class MainWindow(QMainWindow):
         self._set_default_draft_export_settings()
         self._apply_draft_defaults_for_mandant(self.active_mandant_id)
         self._apply_draft_export_settings(draft_settings)
+        self._set_customer_article_templates(loaded_templates)
         self._update_draft_preview()
 
         for group in self.groups:
@@ -2792,6 +3395,8 @@ class MainWindow(QMainWindow):
                     group["lexware_export_resource_uri"] = entry.get("lexware_export_resource_uri", "")
                     group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
                     group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
+                    group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+                    group["multi_day_allowance_assignment_rule"] = entry.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
                     group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
                     group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
                     group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
@@ -2800,6 +3405,7 @@ class MainWindow(QMainWindow):
         self._save_manual_data()
         self.last_action = None
         self.refresh_table()
+        self._refresh_article_template_combo_for_group(self._current_group_for_article_editing())
         self._log_action(f"Projekt geladen | {file_path}")
 
     def export_visible_groups_to_csv(self) -> None:
@@ -3009,6 +3615,8 @@ class MainWindow(QMainWindow):
                 )
                 return
 
+        roundtrip_tours_applied = self._apply_roundtrip_distribution_for_groups(export_candidates)
+
         geocode_unresolved_groups: list[dict] = []
         for group in export_candidates:
             if float(group.get("travel_km", 0.0) or 0.0) > 0:
@@ -3042,12 +3650,18 @@ class MainWindow(QMainWindow):
             if geocode_decision != QMessageBox.Yes:
                 return
 
+        account_context_lines = self._lexware_context_lines_for_groups(export_candidates)
+
         preview_lines = []
         for idx, group in enumerate(export_candidates[:12], start=1):
-            preview_lines.append(
+            line = (
                 f"{idx}. {self._format_date_for_display(group.get('datum', ''))} | "
                 f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')}"
             )
+            segment_text = self._travel_segment_preview_text(group)
+            if segment_text:
+                line += f"\n   {segment_text}"
+            preview_lines.append(line)
         if len(export_candidates) > 12:
             preview_lines.append(f"... +{len(export_candidates) - 12} weitere")
 
@@ -3066,8 +3680,10 @@ class MainWindow(QMainWindow):
             f"Übersprungen (bereits exportiert): {skipped_count}\n\n"
             f"Mit Warnungen (Auswahl): {len(warning_groups)}\n"
             f"Ohne automatische Geokodierung: {len(geocode_unresolved_groups)}\n"
+            f"Rundreisen automatisch verteilt: {roundtrip_tours_applied}\n"
             f"Modus: {'Überschreiben bestehender Angebote' if export_mode == 'overwrite' else 'Neue Entwürfe anlegen'}\n\n"
-            f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
+            + ("Lexware Konto-Kontext:\n" + "\n".join(account_context_lines) + "\n\n" if account_context_lines else "")
+            + f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
             + ("Bereits exportiert (Auszug):\n" + "\n".join(skipped_preview_lines) + "\n\n" if skipped_preview_lines else "")
             + "Jetzt exportieren?"
         )
@@ -3583,6 +4199,8 @@ class MainWindow(QMainWindow):
             selected_article_key = group.get("selected_article_key", "")
             selected_article = group.get("selected_article", {})
             travel_mode = group.get("travel_mode", self._default_travel_mode_for_group(group))
+            travel_forward_assignment_rule = group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+            multi_day_allowance_assignment_rule = group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
             travel_hours = float(group.get("travel_hours", 0.0) or 0.0)
             travel_km = float(group.get("travel_km", 0.0) or 0.0)
             travel_hour_rate = float(group.get("travel_hour_rate", 150.0) or 150.0)
@@ -3599,6 +4217,8 @@ class MainWindow(QMainWindow):
                     "selected_article_key": selected_article_key,
                     "selected_article": selected_article,
                     "travel_mode": travel_mode,
+                    "travel_forward_assignment_rule": travel_forward_assignment_rule,
+                    "multi_day_allowance_assignment_rule": multi_day_allowance_assignment_rule,
                     "travel_hours": travel_hours,
                     "travel_km": travel_km,
                     "travel_hour_rate": travel_hour_rate,
@@ -3608,6 +4228,10 @@ class MainWindow(QMainWindow):
                     "lexware_export_resource_uri": export_resource_uri,
                     "lexware_exported_at": exported_at,
                 }
+
+        manual_data["__meta__"] = {
+            "customer_article_templates": getattr(self, "customer_article_templates", {}),
+        }
 
         with open(data_file, "w", encoding="utf-8") as f:
             json.dump(manual_data, f, ensure_ascii=False, indent=2)
@@ -3619,6 +4243,10 @@ class MainWindow(QMainWindow):
 
         with open(data_file, "r", encoding="utf-8") as f:
             manual_data = json.load(f)
+
+        meta_entry = manual_data.get("__meta__", {}) if isinstance(manual_data, dict) else {}
+        if isinstance(meta_entry, dict):
+            self._set_customer_article_templates(meta_entry.get("customer_article_templates", {}))
 
         for group in self.groups:
             key = self._build_group_key(group)
@@ -3647,6 +4275,8 @@ class MainWindow(QMainWindow):
                         group["selected_article_key"] = entry.get("selected_article_key", "")
 
                 group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
+                group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
+                group["multi_day_allowance_assignment_rule"] = entry.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
                 group["travel_hours"] = float(entry.get("travel_hours", 0.0) or 0.0)
                 group["travel_km"] = float(entry.get("travel_km", 0.0) or 0.0)
                 group["travel_hour_rate"] = float(entry.get("travel_hour_rate", 150.0) or 150.0)
@@ -3655,6 +4285,28 @@ class MainWindow(QMainWindow):
                 group["lexware_export_id"] = entry.get("lexware_export_id", "")
                 group["lexware_export_resource_uri"] = entry.get("lexware_export_resource_uri", "")
                 group["lexware_exported_at"] = entry.get("lexware_exported_at", "")
+
+    def _set_customer_article_templates(self, raw_templates) -> None:
+        parsed: dict[str, list[dict]] = {}
+        if isinstance(raw_templates, dict):
+            for mandant_id, templates in raw_templates.items():
+                if not isinstance(templates, list):
+                    continue
+                normalized_templates = []
+                for template in templates:
+                    if not isinstance(template, dict):
+                        continue
+                    articles = template.get("articles", [])
+                    if not isinstance(articles, list) or not articles:
+                        continue
+                    normalized_templates.append({
+                        "name": str(template.get("name", "") or "").strip() or "Vorlage",
+                        "customer_key": str(template.get("customer_key", "") or "").strip(),
+                        "customer_label": str(template.get("customer_label", "") or "").strip(),
+                        "articles": [dict(article) for article in articles if isinstance(article, dict)],
+                    })
+                parsed[str(mandant_id)] = normalized_templates
+        self.customer_article_templates = parsed
 
     def on_table_selection_changed(self) -> None:
         selected_groups = self._selected_groups()

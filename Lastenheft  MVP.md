@@ -5,10 +5,13 @@ Stand: 2026-06-15
 Status: MVP-Fassung mit umgesetzten Erweiterungen
 
 Arbeitsstand 2026-06-15:
-- Teststand: 71/71 Tests gruen.
+- Teststand: 88/88 Tests gruen.
 - Feature-Stand ist in `main` enthalten.
 - CI auf `main` ist gruen.
 - Rueckwaertige Bearbeitung bestehender Lexware-Invoices/Quotations per allgemeinem Listen-/Finalisierungsdialog ist laut offizieller API-Doku nicht Teil des MVP.
+- Kundenspezifische Artikelsatz-Vorlagen sind umgesetzt.
+- Schnellreferenz fuer Artikelauswahl (z. B. `1,4,7`) ist umgesetzt.
+- Wahlregeln fuer Weiterfahrt und Mehrtagespauschale (Tag 1/Tag 2) sind umgesetzt.
 
 ---
 

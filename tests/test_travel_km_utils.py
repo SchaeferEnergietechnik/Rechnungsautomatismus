@@ -85,3 +85,140 @@ def test_calculate_travel_km_for_group_requires_route_duration():
     assert ok is False
     assert "travel_km" not in group
     assert "travel_hours" not in group
+
+
+def test_roundtrip_distribution_splits_travel_across_projects_same_day():
+    window = _window_without_init()
+    window.active_mandant_id = "ges_power_service"
+    window._mandant_full_address = lambda _mandant_id: "Firma"
+
+    coords_map = {
+        "Firma": (50.0, 11.0),
+        "Adresse A": (50.1, 11.1),
+        "Adresse B": (50.2, 11.2),
+    }
+    window._geocode_address = lambda address: coords_map.get(address)
+
+    metrics_map = {
+        ((50.0, 11.0), (50.1, 11.1)): (20.0, 0.5),
+        ((50.1, 11.1), (50.2, 11.2)): (10.0, 0.25),
+        ((50.2, 11.2), (50.0, 11.0)): (30.0, 0.75),
+    }
+    window._route_metrics = lambda start, end: metrics_map.get((start, end))
+
+    groups = [
+        {
+            "datum": "2026-04-07 08:00:00",
+            "kunde_roh": "PowerCorp",
+            "projekt_roh": "Projekt A",
+            "adresse_roh": "Adresse A",
+            "travel_km": 0.0,
+            "travel_hours": 0.0,
+        },
+        {
+            "datum": "2026-04-07 11:00:00",
+            "kunde_roh": "PowerCorp",
+            "projekt_roh": "Projekt B",
+            "adresse_roh": "Adresse B",
+            "travel_km": 0.0,
+            "travel_hours": 0.0,
+        },
+    ]
+
+    applied = window._apply_roundtrip_distribution_for_groups(groups)
+
+    assert applied == 1
+    assert groups[0]["travel_km"] == 20.0
+    assert groups[0]["travel_hours"] == 0.5
+    assert groups[0]["travel_route_origin"] == "Firma"
+    assert groups[0]["travel_route_destination"] == "Adresse A"
+    assert groups[0]["travel_segment_role"] == "first_invoice_outbound"
+
+    assert groups[1]["travel_km"] == 40.0
+    assert groups[1]["travel_hours"] == 1.0
+    assert groups[1]["travel_route_origin"] == "Adresse A"
+    assert "Rueckfahrt zur Firma" in groups[1]["travel_route_destination"]
+    assert groups[1]["travel_segment_role"] == "last_invoice_with_return"
+
+
+def test_roundtrip_distribution_does_not_override_existing_manual_values():
+    window = _window_without_init()
+    window.active_mandant_id = "ges_power_service"
+    window._mandant_full_address = lambda _mandant_id: "Firma"
+    window._geocode_address = lambda _address: (50.0, 11.0)
+    window._route_metrics = lambda _start, _end: (10.0, 0.25)
+
+    groups = [
+        {
+            "datum": "2026-04-07 08:00:00",
+            "kunde_roh": "PowerCorp",
+            "projekt_roh": "Projekt A",
+            "adresse_roh": "Adresse A",
+            "travel_km": 50.0,
+            "travel_hours": 1.0,
+        },
+        {
+            "datum": "2026-04-07 11:00:00",
+            "kunde_roh": "PowerCorp",
+            "projekt_roh": "Projekt B",
+            "adresse_roh": "Adresse B",
+            "travel_km": 0.0,
+            "travel_hours": 0.0,
+        },
+    ]
+
+    applied = window._apply_roundtrip_distribution_for_groups(groups)
+
+    assert applied == 0
+    assert groups[0]["travel_km"] == 50.0
+    assert groups[0]["travel_hours"] == 1.0
+
+
+def test_roundtrip_distribution_forward_assignment_rule_tag_1():
+    window = _window_without_init()
+    window.active_mandant_id = "ges_power_service"
+    window._mandant_full_address = lambda _mandant_id: "Firma"
+
+    coords_map = {
+        "Firma": (50.0, 11.0),
+        "Adresse A": (50.1, 11.1),
+        "Adresse B": (50.2, 11.2),
+    }
+    window._geocode_address = lambda address: coords_map.get(address)
+
+    metrics_map = {
+        ((50.0, 11.0), (50.1, 11.1)): (20.0, 0.5),
+        ((50.1, 11.1), (50.2, 11.2)): (10.0, 0.25),
+        ((50.2, 11.2), (50.0, 11.0)): (30.0, 0.75),
+    }
+    window._route_metrics = lambda start, end: metrics_map.get((start, end))
+
+    groups = [
+        {
+            "datum": "2026-04-07 08:00:00",
+            "kunde_roh": "PowerCorp",
+            "projekt_roh": "Projekt A",
+            "adresse_roh": "Adresse A",
+            "travel_forward_assignment_rule": "tag_1",
+            "travel_km": 0.0,
+            "travel_hours": 0.0,
+        },
+        {
+            "datum": "2026-04-07 11:00:00",
+            "kunde_roh": "PowerCorp",
+            "projekt_roh": "Projekt B",
+            "adresse_roh": "Adresse B",
+            "travel_forward_assignment_rule": "tag_1",
+            "travel_km": 0.0,
+            "travel_hours": 0.0,
+        },
+    ]
+
+    applied = window._apply_roundtrip_distribution_for_groups(groups)
+
+    assert applied == 1
+    # Tag-1-Regel: Weiterfahrt A->B auf erste Rechnung
+    assert groups[0]["travel_km"] == 30.0
+    assert groups[0]["travel_hours"] == 0.75
+    assert groups[1]["travel_km"] == 30.0
+    assert groups[1]["travel_hours"] == 0.75
