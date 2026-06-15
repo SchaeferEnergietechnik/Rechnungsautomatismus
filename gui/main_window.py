@@ -2954,6 +2954,7 @@ class MainWindow(QMainWindow):
 
         export_mode = "create_new"
         export_candidates: list[dict] = []
+        skipped_exported_groups: list[dict] = []
         skipped_count = 0
 
         if is_quotation_mode:
@@ -2983,13 +2984,25 @@ class MainWindow(QMainWindow):
             export_candidates = list(selected_groups)
             skipped_count = 0
         else:
+            skipped_exported_groups = [g for g in selected_groups if self._is_already_exported(g)]
             export_candidates = [g for g in selected_groups if not self._is_already_exported(g)]
             skipped_count = len(selected_groups) - len(export_candidates)
             if not export_candidates:
+                skipped_preview = []
+                for idx, group in enumerate(skipped_exported_groups[:10], start=1):
+                    skipped_preview.append(
+                        f"{idx}. {self._format_date_for_display(group.get('datum', ''))} | "
+                        f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')}"
+                    )
+                if len(skipped_exported_groups) > 10:
+                    skipped_preview.append(f"... +{len(skipped_exported_groups) - 10} weitere")
+
                 QMessageBox.information(
                     self,
                     "Lexware Draft Export",
-                    "Alle ausgewählten Gruppen wurden bereits exportiert und werden nicht erneut erstellt.",
+                    "Alle ausgewählten Gruppen wurden bereits exportiert und werden nicht erneut erstellt.\n\n"
+                    f"Übersprungen: {len(skipped_exported_groups)} Gruppe(n)\n\n"
+                    + "\n".join(skipped_preview),
                 )
                 return
 
@@ -3035,6 +3048,15 @@ class MainWindow(QMainWindow):
         if len(export_candidates) > 12:
             preview_lines.append(f"... +{len(export_candidates) - 12} weitere")
 
+        skipped_preview_lines = []
+        for idx, group in enumerate(skipped_exported_groups[:8], start=1):
+            skipped_preview_lines.append(
+                f"{idx}. {self._format_date_for_display(group.get('datum', ''))} | "
+                f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')}"
+            )
+        if len(skipped_exported_groups) > 8:
+            skipped_preview_lines.append(f"... +{len(skipped_exported_groups) - 8} weitere")
+
         confirm_text = (
             f"Ausgewählt: {len(selected_groups)} Gruppe(n)\n"
             f"Wird exportiert: {len(export_candidates)} Gruppe(n)\n"
@@ -3043,7 +3065,8 @@ class MainWindow(QMainWindow):
             f"Ohne automatische Geokodierung: {len(geocode_unresolved_groups)}\n"
             f"Modus: {'Überschreiben bestehender Angebote' if export_mode == 'overwrite' else 'Neue Entwürfe anlegen'}\n\n"
             f"Zu exportierende Gruppen:\n" + "\n".join(preview_lines) + "\n\n"
-            "Jetzt exportieren?"
+            + ("Bereits exportiert (Auszug):\n" + "\n".join(skipped_preview_lines) + "\n\n" if skipped_preview_lines else "")
+            + "Jetzt exportieren?"
         )
         decision = QMessageBox.question(
             self,
@@ -3057,6 +3080,8 @@ class MainWindow(QMainWindow):
 
         ok_count = 0
         fail_count = 0
+        created_count = 0
+        overwritten_count = 0
         first_error = ""
         failed_previews: list[str] = []
         export_settings = self._draft_export_settings()
@@ -3080,6 +3105,10 @@ class MainWindow(QMainWindow):
 
             if result.get("success"):
                 ok_count += 1
+                if should_overwrite:
+                    overwritten_count += 1
+                else:
+                    created_count += 1
                 response = result.get("response")
                 export_id = ""
                 export_resource_uri = ""
@@ -3126,8 +3155,9 @@ class MainWindow(QMainWindow):
 
         self._log_action(
             "Lexware Draft Export | "
-            f"erfolgreich: {ok_count} | fehlgeschlagen: {fail_count} | "
-            f"uebersprungen: {skipped_count} | mit_warnungen: {warning_export_count}"
+            f"erfolgreich: {ok_count} (neu: {created_count}, ueberschrieben: {overwritten_count}) | "
+            f"fehlgeschlagen: {fail_count} | uebersprungen: {skipped_count} | "
+            f"mit_warnungen: {warning_export_count}"
         )
 
         if fail_count == 0:
@@ -3136,6 +3166,8 @@ class MainWindow(QMainWindow):
                 "Lexware Draft Export",
                 "Export abgeschlossen.\n"
                 f"Erfolgreich: {ok_count}\n"
+                f"Neu erstellt: {created_count}\n"
+                f"Überschrieben: {overwritten_count}\n"
                 f"Mit Warnungen (exportiert): {warning_export_count}\n"
                 f"Uebersprungen (bereits exportiert): {skipped_count}",
             )
@@ -3150,6 +3182,8 @@ class MainWindow(QMainWindow):
             "Lexware Draft Export mit Fehlern",
             "Export abgeschlossen mit Fehlern.\n"
             f"Erfolgreich: {ok_count}\n"
+            f"Neu erstellt: {created_count}\n"
+            f"Überschrieben: {overwritten_count}\n"
             f"Fehlgeschlagen: {fail_count}\n"
             f"Mit Warnungen (exportiert): {warning_export_count}\n"
             f"Uebersprungen (bereits exportiert): {skipped_count}\n\n"

@@ -512,6 +512,7 @@ def test_lexware_export_summary_includes_warning_count(config_loader, contacts_i
             info_mock.assert_called_once()
             info_text = info_mock.call_args.args[2]
             assert "Mit Warnungen (exportiert): 1" in info_text
+            assert "Neu erstellt: 1" in info_text
 
 
 def test_lexware_export_with_missing_geocoding_requires_confirmation(config_loader, contacts_importer):
