@@ -1,12 +1,14 @@
 # LASTENHEFT / MVP
 ## Rechnungstool für Lexware-Rechnungsentwürfe
 
-Stand: 2026-06-14
+Stand: 2026-06-15
 Status: MVP-Fassung mit umgesetzten Erweiterungen
 
-Arbeitsstand Tagesabschluss 2026-06-14:
+Arbeitsstand 2026-06-15:
 - Teststand: 71/71 Tests gruen.
-- Erster Schritt in der naechsten Sitzung: Feature-Branch abschliessen, nach `main` mergen, danach neue `feature/...`-Branch erstellen.
+- Feature-Stand ist in `main` enthalten.
+- CI auf `main` ist gruen.
+- Rueckwaertige Bearbeitung bestehender Lexware-Invoices/Quotations per allgemeinem Listen-/Finalisierungsdialog ist laut offizieller API-Doku nicht Teil des MVP.
 
 ---
 

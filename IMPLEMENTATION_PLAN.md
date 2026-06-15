@@ -1,8 +1,8 @@
 # IMPLEMENTATION PLAN
 ## Konkreter Umsetzungsplan für die nächsten Coding-Schritte
 
-Stand: 2026-06-14
-Letztes Update: 2026-06-14 (Spaet)
+Stand: 2026-06-15
+Letztes Update: 2026-06-15
 
 ---
 
@@ -38,7 +38,7 @@ Bereits vorhanden:
 Noch nicht vorhanden:
 - vollständige Rechnungsadressbearbeitung als eigene Zieladresse
 - End-to-End Feldvalidierung mit klaren Exportblockern in der GUI
-- Final-/PDF-Flow
+- Final-/PDF-Flow fuer Belege mit bekannter API-ID
 - Logo-/Branding-Darstellung im Hauptfenster
 
 ## Fortschritt 2026-06-14
@@ -65,16 +65,19 @@ Erledigt:
   - Fahrtkostentext im Angebot ohne EUR-Betraege
 - Teststand: 71/71 Tests gruen.
 
-Tagesabschluss 2026-06-14:
-- Naechster erster Schritt in der naechsten Sitzung ist organisatorisch:
-  - Feature-Branch per PR abschliessen
-  - nach `main` mergen
-  - neue `feature/...`-Branch fuer die naechsten Umsetzungen starten
+Tagesabschluss 2026-06-15:
+- Organisatorischer Schritt ist erledigt:
+  - Feature-Stand ist in `main` enthalten
+  - CI auf `main` ist gruen
+  - naechster Schritt ist wieder fachliche Umsetzung
+- Nicht weiterverfolgt:
+  - allgemeiner Listen-/Finalisierungsdialog fuer bestehende Lexware-Invoices und Quotations
+  - Grund: offizielle API-Doku dokumentiert Create mit optionalem `finalize=true` und Retrieve per ID, aber keine allgemeine Listen-API und keine nachtraegliche Statusaenderung
 
 Nächster Arbeitsblock:
 - Validierungs- und Exporthärtung:
-  - harte Exportblocker in GUI sichtbar machen
-  - Feldfehler pro Gruppe klar visualisieren
+  - harte Exportblocker vor Sammel-Export durchsetzen
+  - Feldfehler pro Gruppe weiterhin klar visualisieren
   - Pflichtfelder vor Export vollständig prüfen
   - Fehler-/Warnungs-Workflow für Sammel-Export ergänzen
 

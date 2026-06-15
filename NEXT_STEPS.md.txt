@@ -1,7 +1,7 @@
 # NEXT STEPS
 ## Nächste Entwicklungsschritte vom aktuellen Stand zum Rechnungs-MVP
 
-Stand: 2026-06-14
+Stand: 2026-06-15
 
 ---
 
@@ -55,10 +55,19 @@ Bereits umgesetzt:
 - Fahrtkostentext im Angebot ohne EUR-Beträge (nur Stunden und KM).
 - Teststand aktuell: 71/71.
 
+## Update 2026-06-15
+
+Bereits umgesetzt:
+- Feature-Stand ist in `main` gemerged.
+- CI ist wieder gruen (Dependencies + Systemlibs fuer PySide6 im Workflow).
+- GUI zeigt jetzt Validierung und Positionsvorschau direkt in Tabelle/Detailbereich.
+- Mapper-Fallback fuer `mandant_id` aus Gruppendaten aktiv.
+- Der verworfene Lexware-Ansatz ist dokumentiert: kein weiterer Arbeitsblock fuer Listing/Finalisierung bestehender Invoices/Quotations ohne bekannte ID.
+
 Als nächstes umsetzen:
-- Erstschritt naechste Sitzung: Feature-Branch abschliessen und in `main` mergen.
-- Direkt danach neue `feature/...`-Branch erstellen.
 - Validierungs- und Exporttransparenz weiter erhöhen:
+- Export bei harten Validierungsfehlern blockieren
+- Workflow fuer Warnungen im Sammel-Export klar steuern
   - klarer Exporthinweis bei fehlender Geokodierung
   - optionale Distanzquelle (Routing statt Luftlinie)
   - Fahrkostenregeln optional kundenstammbasiert zentralisieren

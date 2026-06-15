@@ -1,13 +1,15 @@
 # CURRENT GUI STATUS
 ## Aktueller Stand der vorhandenen GUI
 
-Stand: 2026-06-14
-Letztes Update: 2026-06-14 (Spaet)
+Stand: 2026-06-15
+Letztes Update: 2026-06-15
 
 Kurzstatistik:
 - Teststand: 71/71 Tests gruen (`pytest -q`)
 - Kundenadresse im Export aus Kundenmatch statt Projektadresse
 - Fahrtkostenberechnung als Hin- und Rueckfahrt
+- GUI zeigt Validierungsstatus in der Tabelle
+- Detailansicht zeigt Validierungsmeldungen und Rechnungspositionsvorschau
 
 ---
 
@@ -160,10 +162,11 @@ Die Tabelle enthält aktuell diese Spalten:
 7. Mitarbeiter
 8. Status
 9. Automatikstatus
-10. RE
-11. Adresse
-12. Geändert
-13. Notiz
+10. Validierung
+11. RE
+12. Adresse
+13. Geändert
+14. Notiz
 
 ---
 
@@ -258,6 +261,9 @@ Freitextsuche über u. a.:
 Bei Auswahl einer einzelnen Gruppe zeigt die Detailansicht aktuell u. a.:
 - manueller Status
 - manuelle Notiz
+- Validierungsstatus (OK/Warnung/Blockiert)
+- Validierungsmeldungen (Error/Warning/Info)
+- Positionsanzahl und Positionsvorschau
 - Fahrtkostenmodus und berechnete Fahrtkostenwerte
 - Status
 - automatischer Status

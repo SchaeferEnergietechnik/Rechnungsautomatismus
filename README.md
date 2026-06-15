@@ -1,7 +1,7 @@
 # Rechnungsautomatismus
 Es wird ein Tool, welches Anhand der Temine Excel Rechnungen für Lexware vorbereitet
 
-## Stand 2026-06-14
+## Stand 2026-06-15
 
 Aktueller Funktionsstand:
 - Mandantenspezifische Kontakte und Artikel aus CSV sind aktiv.
@@ -24,11 +24,16 @@ Aktueller Funktionsstand:
 - Kundenmatch nutzt robusten CSV-Import mit Encoding-Fallback (utf-8-sig/cp1252/latin-1).
 - Fahrtkostenberechnung und -abrechnung erfolgt fuer Hin- und Rueckfahrt.
 - Angebotstext bei Fahrtkosten zeigt nur Stunden und KM (ohne EUR-Betraege im Text).
+- Validierungsstatus ist in der GUI-Tabelle sichtbar.
+- Detailansicht zeigt Validierungsmeldungen und Rechnungspositionsvorschau.
+- Mapper nutzt `mandant_id` aus der Gruppe als Fallback (kein falscher Mandant-Fehler mehr).
 - Teststand: 71/71 Tests gruen (`pytest -q`).
 
-Tagesabschluss 2026-06-14:
-- Naechster erster Schritt in der naechsten Sitzung: aktuellen Feature-Branch per PR abschliessen und nach `main` mergen.
-- Danach direkt neue Arbeits-Branch erstellen (`feature/...`) und dort weiterarbeiten.
+Update 2026-06-15:
+- Stand aus `feature/mandant-specific-data` ist nach `main` gemerged.
+- GitHub Actions CI ist wieder gruen (inkl. PySide6-Import in CI).
+- Der Versuch, bestehende Lexware-Belege per API zu listen/finalisieren/PDF-seitig rueckwaerts zu bearbeiten, wurde verworfen.
+- Laut offizieller Lexware-Doku sind fuer Invoices/Quotations `POST ...[?finalize=true]` und `GET .../{id}` dokumentiert, aber kein allgemeiner Listen-Endpoint und keine nachtraegliche Statusaenderung bestehender Belege.
 
 ## Lexware Zugangsdaten sicher speichern
 
@@ -66,6 +71,10 @@ Die mandantenspezifischen CSV-Dateien liegen ohne Ausnahme unter:
 Testmodus-Hinweis (Angebote statt Rechnungen):
 - Standard fuer Draft-Export ist aktuell `LEXWARE_DRAFT_ENDPOINT=/v1/quotations`, damit Tests keine Rechnungen erzeugen.
 - Fuer den spaeteren Echtbetrieb auf Rechnungen den Endpoint auf `LEXWARE_DRAFT_ENDPOINT=/v1/invoices` setzen.
+
+Wichtige API-Grenze laut offizieller Lexware-Doku:
+- Bestehende Invoices/Quotations sollen nicht ueber einen allgemeinen Listen-Dialog per API geladen werden.
+- Die Finalisierung ist fuer diese Belegtypen beim Erzeugen ueber `finalize=true` vorgesehen, nicht nachtraeglich per PUT/PATCH.
 
 Fahrtkostenlogik (MVP):
 - Startadresse: aktive Mandantenadresse aus `config/mandants.json`
