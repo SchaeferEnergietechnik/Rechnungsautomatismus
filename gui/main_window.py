@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         "Mitarbeiter",
         "Status",
         "Automatikstatus",
+        "Validierung",
         "RE",
         "Adresse",
         "Geändert",
@@ -296,9 +297,9 @@ class MainWindow(QMainWindow):
 
         header = self.table_widget.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
-        for i in range(1, 12):
+        for i in range(1, 13):
             header.setSectionResizeMode(i, QHeaderView.Interactive)
-        header.setSectionResizeMode(12, QHeaderView.Stretch)
+        header.setSectionResizeMode(13, QHeaderView.Stretch)
         header.setMinimumSectionSize(48)
         header.setDefaultSectionSize(120)
         self.table_widget.verticalHeader().setDefaultSectionSize(30)
@@ -312,9 +313,10 @@ class MainWindow(QMainWindow):
         header.resizeSection(6, 180)
         header.resizeSection(7, 120)
         header.resizeSection(8, 130)
-        header.resizeSection(9, 100)
-        header.resizeSection(10, 240)
-        header.resizeSection(11, 90)
+        header.resizeSection(9, 120)
+        header.resizeSection(10, 100)
+        header.resizeSection(11, 240)
+        header.resizeSection(12, 90)
 
         self.detail_view = QPlainTextEdit()
         self.detail_view.setReadOnly(True)
@@ -1244,6 +1246,7 @@ class MainWindow(QMainWindow):
         self._sync_article_price_editor_from_group(group)
 
     def _refresh_group_view_after_article_change(self, group: dict) -> None:
+        self._refresh_group_invoice_proposal(group)
         self._update_article_summary(group)
         self.detail_view.setPlainText(self._build_detail_text(group))
         self.refresh_table()
@@ -1268,24 +1271,90 @@ class MainWindow(QMainWindow):
             group["customer_match_zip"] = ""
             group["customer_match_city"] = ""
             group["customer_match_country"] = "DE"
+            group["invoice_validation_errors"] = 0
+            group["invoice_validation_warnings"] = 0
+            group["invoice_validation_infos"] = 0
+            group["invoice_validation_messages"] = []
+            group["invoice_validation_state"] = "Unbekannt"
+            group["invoice_export_ready"] = False
+            group["invoice_positions_count"] = 0
+            group["invoice_positions_preview"] = []
 
         if self.invoice_mapper is None:
             return
 
         for group in self.groups:
             proposal = self.invoice_mapper.map_group(group, contacts=contacts)
-            match = proposal.customer_match
-            group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
-            group["customer_match_name"] = str(match.customer_name or "")
-            group["customer_match_number"] = str(match.customer_number or "")
-            street = getattr(match, "address_street", "")
-            zip_code = getattr(match, "address_zip", "")
-            city = getattr(match, "address_city", "")
-            country = getattr(match, "address_country", "DE")
-            group["customer_match_street"] = street.strip() if isinstance(street, str) else ""
-            group["customer_match_zip"] = zip_code.strip() if isinstance(zip_code, str) else ""
-            group["customer_match_city"] = city.strip() if isinstance(city, str) else ""
-            group["customer_match_country"] = country.strip() if isinstance(country, str) and country.strip() else "DE"
+            self._apply_proposal_to_group(group, proposal)
+
+    def _refresh_group_invoice_proposal(self, group: dict) -> None:
+        if self.invoice_mapper is None:
+            return
+
+        mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
+        group["mandant_id"] = mandant_id
+        contacts = self._load_contacts_for_mandant(mandant_id)
+        proposal = self.invoice_mapper.map_group(group, contacts=contacts)
+        self._apply_proposal_to_group(group, proposal)
+
+    def _apply_proposal_to_group(self, group: dict, proposal) -> None:
+        match = proposal.customer_match
+        group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
+        group["customer_match_name"] = str(match.customer_name or "")
+        group["customer_match_number"] = str(match.customer_number or "")
+
+        street = getattr(match, "address_street", "")
+        zip_code = getattr(match, "address_zip", "")
+        city = getattr(match, "address_city", "")
+        country = getattr(match, "address_country", "DE")
+        group["customer_match_street"] = street.strip() if isinstance(street, str) else ""
+        group["customer_match_zip"] = zip_code.strip() if isinstance(zip_code, str) else ""
+        group["customer_match_city"] = city.strip() if isinstance(city, str) else ""
+        group["customer_match_country"] = country.strip() if isinstance(country, str) and country.strip() else "DE"
+
+        raw_messages = getattr(proposal, "validation_messages", [])
+        messages = raw_messages if isinstance(raw_messages, list) else []
+        errors = sum(1 for msg in messages if str(getattr(msg, "level", "")).lower() == "error")
+        warnings = sum(1 for msg in messages if str(getattr(msg, "level", "")).lower() == "warning")
+        infos = sum(1 for msg in messages if str(getattr(msg, "level", "")).lower() == "info")
+
+        group["invoice_validation_errors"] = errors
+        group["invoice_validation_warnings"] = warnings
+        group["invoice_validation_infos"] = infos
+        group["invoice_validation_messages"] = [
+            f"{str(getattr(msg, 'level', '')).upper()}: {str(getattr(msg, 'message', '')).strip()}".strip()
+            for msg in messages
+        ]
+        group["invoice_export_ready"] = bool(getattr(proposal, "is_export_ready", False))
+
+        if errors > 0:
+            state = f"Blockiert ({errors})"
+        elif warnings > 0:
+            state = f"Warnung ({warnings})"
+        elif infos > 0:
+            state = f"Info ({infos})"
+        else:
+            state = "OK"
+        group["invoice_validation_state"] = state
+
+        raw_positions = getattr(proposal, "positions", [])
+        positions = raw_positions if isinstance(raw_positions, list) else []
+        group["invoice_positions_count"] = len(positions)
+        preview_lines = []
+        for position in positions[:8]:
+            title = str(getattr(position, "title", "") or "Position").strip()
+            quantity = float(getattr(position, "quantity", 0.0) or 0.0)
+            unit = str(getattr(position, "unit", "") or "").strip()
+            unit_price = float(getattr(position, "unit_price_net", 0.0) or 0.0)
+            total_net = float(getattr(position, "total_net", quantity * unit_price) or 0.0)
+            preview_lines.append(
+                f"{title} | {quantity:g} {unit} x {unit_price:.2f} EUR = {total_net:.2f} EUR"
+            )
+
+        remaining_count = len(positions) - len(preview_lines)
+        if remaining_count > 0:
+            preview_lines.append(f"... +{remaining_count} weitere Position(en)")
+        group["invoice_positions_preview"] = preview_lines
 
     def _on_mandant_changed_combo(self) -> None:
         """Handler für Mandantenwechsel im Dropdown."""
@@ -2189,6 +2258,14 @@ class MainWindow(QMainWindow):
             group.setdefault("customer_match_zip", "")
             group.setdefault("customer_match_city", "")
             group.setdefault("customer_match_country", "DE")
+            group.setdefault("invoice_validation_errors", 0)
+            group.setdefault("invoice_validation_warnings", 0)
+            group.setdefault("invoice_validation_infos", 0)
+            group.setdefault("invoice_validation_messages", [])
+            group.setdefault("invoice_validation_state", "Unbekannt")
+            group.setdefault("invoice_export_ready", False)
+            group.setdefault("invoice_positions_count", 0)
+            group.setdefault("invoice_positions_preview", [])
             self._ensure_travel_fields_for_group(group)
 
         # Setze active_mandant_id auf den Standard-Mandanten (oder bewahre ihn)
@@ -2199,6 +2276,7 @@ class MainWindow(QMainWindow):
         self._apply_customer_matching_for_mandant(self.active_mandant_id)
 
         self._apply_saved_manual_data()
+        self._apply_customer_matching_for_mandant(self.active_mandant_id)
 
         if reset_session_state:
             self.last_action = None
@@ -2264,6 +2342,22 @@ class MainWindow(QMainWindow):
         if state == "nicht_zugeordnet":
             return "Nicht zugeordnet"
         return state
+
+    def _validation_status_text(self, group: dict) -> str:
+        state = str(group.get("invoice_validation_state", "")).strip()
+        if state:
+            return state
+
+        errors = int(group.get("invoice_validation_errors", 0) or 0)
+        warnings = int(group.get("invoice_validation_warnings", 0) or 0)
+        infos = int(group.get("invoice_validation_infos", 0) or 0)
+        if errors > 0:
+            return f"Blockiert ({errors})"
+        if warnings > 0:
+            return f"Warnung ({warnings})"
+        if infos > 0:
+            return f"Info ({infos})"
+        return "OK"
 
     def activate_open_only_mode(self) -> None:
         self.manual_filter_combo.setCurrentText("Offen")
@@ -2631,7 +2725,7 @@ class MainWindow(QMainWindow):
             writer = csv.writer(f, delimiter=";")
             writer.writerow([
                 "ManuellerStatus", "ManuelleNotiz", "Status", "Automatikstatus", "Datum", "KW",
-                "Kunde", "Kundenmatch", "Kundennummer", "Projekt", "Adresse", "Ansprechpartner", "Auftrag", "Bemerkungen",
+                "Kunde", "Kundenmatch", "Kundennummer", "Validierung", "Projekt", "Adresse", "Ansprechpartner", "Auftrag", "Bemerkungen",
                 "Mitarbeiter", "RE", "Geaendert", "Klassifikationsgruende",
             ])
 
@@ -2646,6 +2740,7 @@ class MainWindow(QMainWindow):
                     group.get("kunde_roh", ""),
                     self._customer_match_text(group),
                     group.get("customer_match_number", ""),
+                    self._validation_status_text(group),
                     group.get("projekt_roh", ""),
                     group.get("adresse_roh", ""),
                     group.get("ansprechpartner_roh", ""),
@@ -2677,6 +2772,14 @@ class MainWindow(QMainWindow):
                 "customer_match_state": group.get("customer_match_state", ""),
                 "customer_match_name": group.get("customer_match_name", ""),
                 "customer_match_number": group.get("customer_match_number", ""),
+                "invoice_validation_state": self._validation_status_text(group),
+                "invoice_validation_errors": int(group.get("invoice_validation_errors", 0) or 0),
+                "invoice_validation_warnings": int(group.get("invoice_validation_warnings", 0) or 0),
+                "invoice_validation_infos": int(group.get("invoice_validation_infos", 0) or 0),
+                "invoice_export_ready": bool(group.get("invoice_export_ready", False)),
+                "invoice_validation_messages": group.get("invoice_validation_messages", []),
+                "invoice_positions_count": int(group.get("invoice_positions_count", 0) or 0),
+                "invoice_positions_preview": group.get("invoice_positions_preview", []),
                 "projekt_roh": group.get("projekt_roh", ""),
                 "adresse_roh": group.get("adresse_roh", ""),
                 "ansprechpartner_roh": group.get("ansprechpartner_roh", ""),
@@ -2922,6 +3025,7 @@ class MainWindow(QMainWindow):
                 ", ".join(group.get("mitarbeiter_liste", [])),
                 self._status_text(group),
                 group.get("gruppenstatus", ""),
+                self._validation_status_text(group),
                 ", ".join(group.get("re_roh_liste", [])),
                 self._clip_text(group.get("adresse_roh", ""), 60),
                 group.get("_last_changed_at", ""),
@@ -2998,12 +3102,21 @@ class MainWindow(QMainWindow):
                 order = {"einsatz": 0, "prueffall": 1, "unbekannt": 2}
                 return order.get(g.get("gruppenstatus", ""), 99)
             if column == 9:
-                return ", ".join(g.get("re_roh_liste", [])).lower()
+                text = self._validation_status_text(g).lower()
+                if text.startswith("blockiert"):
+                    return (0, text)
+                if text.startswith("warnung"):
+                    return (1, text)
+                if text.startswith("info"):
+                    return (2, text)
+                return (3, text)
             if column == 10:
-                return g.get("adresse_roh", "").lower()
+                return ", ".join(g.get("re_roh_liste", [])).lower()
             if column == 11:
-                return g.get("_last_changed_at", "")
+                return g.get("adresse_roh", "").lower()
             if column == 12:
+                return g.get("_last_changed_at", "")
+            if column == 13:
                 return g.get("manuelle_notiz", "").lower()
             return ""
 
@@ -3087,6 +3200,9 @@ class MainWindow(QMainWindow):
             f"Kundenmatch: {self._customer_match_text(group)}",
             f"Zugeordneter Kunde: {group.get('customer_match_name', '')}",
             f"Kundennummer: {group.get('customer_match_number', '')}",
+            f"Validierung: {self._validation_status_text(group)}",
+            f"Export bereit: {'Ja' if bool(group.get('invoice_export_ready', False)) else 'Nein'}",
+            f"Positionen gesamt: {group.get('invoice_positions_count', 0)}",
             f"Projekt: {group.get('projekt_roh', '')}",
             f"Adresse: {group.get('adresse_roh', '')}",
             f"Ansprechpartner: {group.get('ansprechpartner_roh', '')}",
@@ -3096,8 +3212,29 @@ class MainWindow(QMainWindow):
             f"RE: {', '.join(group.get('re_roh_liste', []))}",
             f"Geändert: {group.get('_last_changed_at', '')}",
             "",
-            "Klassifikationsgründe:",
+            "Validierungsmeldungen:",
         ]
+
+        validation_messages = group.get("invoice_validation_messages", [])
+        if validation_messages:
+            for message in validation_messages:
+                detail_lines.append(f"- {message}")
+        else:
+            detail_lines.append("- Keine")
+
+        detail_lines.append("")
+        detail_lines.append("Rechnungspositionen:")
+        position_lines = group.get("invoice_positions_preview", [])
+        if position_lines:
+            for line in position_lines:
+                detail_lines.append(f"- {line}")
+        else:
+            detail_lines.append("- Keine Positionen")
+
+        detail_lines.extend([
+            "",
+            "Klassifikationsgründe:",
+        ])
 
         for grund in group.get("klassifikationsgruende", []):
             detail_lines.append(f"- {grund}")
@@ -3162,6 +3299,8 @@ class MainWindow(QMainWindow):
             group.get("kw", ""),
             group.get("kunde_roh", ""),
             self._customer_match_text(group),
+            self._validation_status_text(group),
+            " ".join(group.get("invoice_validation_messages", [])),
             group.get("customer_match_name", ""),
             group.get("customer_match_number", ""),
             group.get("projekt_roh", ""),
@@ -3176,6 +3315,7 @@ class MainWindow(QMainWindow):
             group.get("manueller_status", "offen"),
             group.get("manuelle_notiz", ""),
             group.get("_last_changed_at", ""),
+            " ".join(group.get("invoice_positions_preview", [])),
         ]
         return " | ".join(str(v) for v in values).lower()
 
