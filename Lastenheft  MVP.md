@@ -1,8 +1,12 @@
 # LASTENHEFT / MVP
 ## Rechnungstool für Lexware-Rechnungsentwürfe
 
-Stand: 2026-06-06  
-Status: Konsolidierte MVP-Fassung
+Stand: 2026-06-14
+Status: MVP-Fassung mit umgesetzten Erweiterungen
+
+Arbeitsstand Tagesabschluss 2026-06-14:
+- Teststand: 71/71 Tests gruen.
+- Erster Schritt in der naechsten Sitzung: Feature-Branch abschliessen, nach `main` mergen, danach neue `feature/...`-Branch erstellen.
 
 ---
 
@@ -34,7 +38,7 @@ Nicht Bestandteil des MVP:
 - PDF automatisch herunterladen oder öffnen
 - Angebote automatisch in Rechnungen überführen
 - komplexe Rundreiseautomatik
-- Vorlagen-/Favoritensystem
+- vollstaendiges Vorlagen-/Favoritensystem (jenseits Basis-Textvorlagen)
 - vollständiger Excel-Lexware-Abgleich
 - automatisches Schreiben in die RE-Spalte
 
@@ -142,7 +146,8 @@ Das Zielobjekt des MVP ist:
 
 ## **Lexware-Rechnungsentwurf (Draft)**
 
-Nicht Angebot, nicht finale Rechnung.
+Im Testbetrieb kann der Draft-Endpunkt auf Angebote zeigen (`/v1/quotations`),
+im Echtbetrieb auf Rechnungen (`/v1/invoices`).
 
 Die technische Machbarkeit ist bereits nachgewiesen:
 - Lesen aus Lexware funktioniert
@@ -427,6 +432,28 @@ Mögliche Varianten:
 Nicht zulässig:
 - beides gleichzeitig doppelt
 
+MVP-Umsetzung (verbindlich):
+- Startadresse = Mandantenadresse (`strasse`, `plz`, `ort`)
+- Zieladresse = Adressspalte aus Termin-Excel (`adresse_roh`)
+- KM werden automatisch als echte Auto-Fahrstrecke berechnet (geokodiert + Routing)
+- Werte bleiben je Rechnung manuell editierbar
+
+Fahrtkostensätze (Default, editierbar pro Rechnung):
+- Fahrtstunden-Satz: **150 EUR / Stunde**
+- Kilometer-Satz: **0,70 EUR / km**
+
+Abrechnungsmodus je Rechnung (auswählbar):
+- `extra_article` = Fahrtkosten als separate Position
+- `included_in_first_article` = Fahrtkosten im ersten Leistungsartikel enthalten
+
+Kundenspezifischer Default:
+- Standardmäßig `extra_article`
+- Für Kundenname enthält "Faber Etec": `included_in_first_article`
+
+Vorschau:
+- Berechnete Stunden, KM, Sätze und Gesamtbetrag sind vor Export sichtbar
+- Manuelle Anpassungen sind vor Export möglich
+
 ---
 
 # 25. Mehrtagespauschale
@@ -508,12 +535,25 @@ Nicht MVP, aber geplant:
 - PDF herunterladen
 - PDF per Button öffnen
 - Final-Export
-- Vorlagen
+- erweitertes Vorlagen-/Favoritensystem
 - Favoriten / Schnellcodes
 - Angebotsübernahme
 - Excel/Lexware-Abgleich
 - RE automatisch schreiben
 - komplexe Fahrt-/Rundreise-Logik
+
+---
+
+# 32. Umgesetzter Zusatzstand (2026-06-14)
+
+Bereits umgesetzt und im laufenden Stand aktiv:
+- Mandantenabhaengige Kontakte und Artikel
+- Kunden-Matching in der GUI
+- Mehrfach-Artikel je Vorschlag
+- Draft-Felder (Belegtitel/Einleitung/Nachbemerkung/Zahlungsziel) inkl. Persistenz
+- Fahrtkostenlogik mit Routing, manueller Uebersteuerung und Exportintegration
+- separates Angebots-/Rechnungsdialogfenster
+- Lexware API-Anbindung fuer Kunden und Textvorlagen inkl. kundenbezogenem Filter
 
 ---
 

@@ -9,7 +9,21 @@
       "ort": "Altmärkische Wische",
       "contacts_csv": "data/ges_energietechnik/contacts.csv",
       "products_csv": "data/ges_energietechnik/produkte_services.csv",
+      "lexware_company_id": "",
       "default_payment_terms": "14 Tage netto",
+      "default_draft_title": "Angebot",
+      "default_draft_introduction": "Automatisch erzeugter Entwurf für das Angebot der G.E.S. Energietechnik GmbH.",
+      "draft_introduction_templates": [
+        "Automatisch erzeugter Entwurf für das Angebot der G.E.S. Energietechnik GmbH.",
+        "Vielen Dank für Ihre Anfrage. Nachfolgend erhalten Sie unser Angebot für die angefragten Leistungen.",
+        "Hiermit bieten wir die beschriebenen Leistungen gemäß den abgestimmten Einsatzdaten an."
+      ],
+      "default_draft_remark": "Erzeugt durch Rechnungsautomatismus",
+      "draft_remark_templates": [
+        "Erzeugt durch Rechnungsautomatismus",
+        "Bei Rückfragen stehen wir Ihnen jederzeit zur Verfügung.",
+        "Zahlungsziel gemäß Vereinbarung. Vielen Dank für Ihren Auftrag."
+      ],
       "logo_path": "assets/logos/ges_energietechnik.png"
     },
     {
@@ -21,7 +35,21 @@
       "ort": "Altmärkische Wische",
       "contacts_csv": "data/ges_power_service/contacts.csv",
       "products_csv": "data/ges_power_service/produkte_services.csv",
+      "lexware_company_id": "",
       "default_payment_terms": "14 Tage netto",
+      "default_draft_title": "Angebot",
+      "default_draft_introduction": "Automatisch erzeugter Entwurf für das Angebot der G.E.S. Power Service GmbH.",
+      "draft_introduction_templates": [
+        "Automatisch erzeugter Entwurf für das Angebot der G.E.S. Power Service GmbH.",
+        "Vielen Dank für Ihre Anfrage. Nachfolgend erhalten Sie unser Angebot für die angefragten Leistungen.",
+        "Hiermit bieten wir die beschriebenen Leistungen gemäß den abgestimmten Einsatzdaten an."
+      ],
+      "default_draft_remark": "Erzeugt durch Rechnungsautomatismus",
+      "draft_remark_templates": [
+        "Erzeugt durch Rechnungsautomatismus",
+        "Bei Rückfragen stehen wir Ihnen jederzeit zur Verfügung.",
+        "Zahlungsziel gemäß Vereinbarung. Vielen Dank für Ihren Auftrag."
+      ],
       "logo_path": "assets/logos/ges_power_service.png"
     }
   ]

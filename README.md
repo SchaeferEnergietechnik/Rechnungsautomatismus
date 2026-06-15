@@ -1,6 +1,35 @@
 # Rechnungsautomatismus
 Es wird ein Tool, welches Anhand der Temine Excel Rechnungen für Lexware vorbereitet
 
+## Stand 2026-06-14
+
+Aktueller Funktionsstand:
+- Mandantenspezifische Kontakte und Artikel aus CSV sind aktiv.
+- Mehrfach-Artikel pro Vorschlag sind in der GUI bearbeitbar.
+- Lexware-Draft-Export aus der GUI ist produktiv vorhanden (inkl. Duplikat-Schutz).
+- Draft-Felder sind editierbar und persistent:
+	- Belegtitel
+	- Einleitung
+	- Nachbemerkung
+	- Zahlungsziel
+- Fahrtkostenlogik ist integriert:
+	- Startadresse aus Mandant
+	- Zieladresse aus Einsatz
+	- echte Auto-Fahrstrecke (Routing)
+	- robuste Koordinaten-/Adressverarbeitung
+	- Modi `extra_article` und `included_in_first_article`
+- Separates Angebots-/Rechnungsfenster ist vorhanden.
+- Lexware-Textvorlagen werden per API geladen und kundenbezogen gefiltert.
+- Kundenadresse fuer den Export wird aus gematchten Kundendaten (contacts.csv) uebernommen.
+- Kundenmatch nutzt robusten CSV-Import mit Encoding-Fallback (utf-8-sig/cp1252/latin-1).
+- Fahrtkostenberechnung und -abrechnung erfolgt fuer Hin- und Rueckfahrt.
+- Angebotstext bei Fahrtkosten zeigt nur Stunden und KM (ohne EUR-Betraege im Text).
+- Teststand: 71/71 Tests gruen (`pytest -q`).
+
+Tagesabschluss 2026-06-14:
+- Naechster erster Schritt in der naechsten Sitzung: aktuellen Feature-Branch per PR abschliessen und nach `main` mergen.
+- Danach direkt neue Arbeits-Branch erstellen (`feature/...`) und dort weiterarbeiten.
+
 ## Lexware Zugangsdaten sicher speichern
 
 Lege echte Zugangsdaten nur lokal ab und teile sie nicht im Chat.
@@ -23,10 +52,31 @@ Empfohlene Umgebungsvariablen:
 - `LEXWARE_REFRESH_TOKEN`
 - `LEXWARE_TOKEN_URL`
 - `LEXWARE_COMPANY_ID`
+- `LEXWARE_TEMPLATES_ENDPOINT` (optional, Default: `/v1/text-modules`)
+- `LEXWARE_CUSTOMERS_ENDPOINT` (optional, Default: `/v1/contacts`)
+
+Wenn du mehrere Lexware-Accounts nutzt, kannst du je Mandant in `config/mandants.json` zusätzlich `lexware_company_id` pflegen. Der Export verwendet dann beim aktiven Mandanten diese Company-ID.
+
+Die mandantenspezifischen CSV-Dateien liegen ohne Ausnahme unter:
+- `data/ges_energietechnik/contacts.csv`
+- `data/ges_energietechnik/produkte_services.csv`
+- `data/ges_power_service/contacts.csv`
+- `data/ges_power_service/produkte_services.csv`
 
 Testmodus-Hinweis (Angebote statt Rechnungen):
 - Standard fuer Draft-Export ist aktuell `LEXWARE_DRAFT_ENDPOINT=/v1/quotations`, damit Tests keine Rechnungen erzeugen.
 - Fuer den spaeteren Echtbetrieb auf Rechnungen den Endpoint auf `LEXWARE_DRAFT_ENDPOINT=/v1/invoices` setzen.
+
+Fahrtkostenlogik (MVP):
+- Startadresse: aktive Mandantenadresse aus `config/mandants.json`
+- Zieladresse: Einsatzadresse aus Termin-Excel (`adresse_roh`)
+- KM werden automatisch als echte Auto-Fahrstrecke berechnet (Routing) und sind manuell anpassbar
+- Standardwerte pro Rechnung:
+	- `150 EUR/Stunde`
+	- `0,70 EUR/km`
+- Abrechnungsmodus pro Rechnung:
+	- `extra_article`
+	- `included_in_first_article`
 
 Wichtig:
 - Keine Zugangsdaten in versionierte JSON-Dateien unter `config/` eintragen.

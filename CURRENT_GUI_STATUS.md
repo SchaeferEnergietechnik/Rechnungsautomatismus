@@ -2,6 +2,12 @@
 ## Aktueller Stand der vorhandenen GUI
 
 Stand: 2026-06-14
+Letztes Update: 2026-06-14 (Spaet)
+
+Kurzstatistik:
+- Teststand: 71/71 Tests gruen (`pytest -q`)
+- Kundenadresse im Export aus Kundenmatch statt Projektadresse
+- Fahrtkostenberechnung als Hin- und Rueckfahrt
 
 ---
 
@@ -64,6 +70,7 @@ Enthält Buttons für:
 - Sitzung speichern
 - CSV exportieren
 - JSON exportieren
+- Angebot/Rechnung bearbeiten (separates Dialogfenster)
 - Lexware Draft exportieren
 
 Enthält zusätzlich:
@@ -118,6 +125,17 @@ Enthält:
 - Detailansicht
 - Notizfeld
 - Änderungsverlauf
+- kompakte Draft-Steuerung inkl. Vorschau
+
+Zusätzlich vorhanden:
+- separates Angebots-/Rechnungsdialogfenster
+  - Belegtitel, Einleitung, Nachbemerkung, Zahlungsziel
+  - lokale Vorlagen (Mandantenkonfiguration)
+  - Lexware-API Vorlagen
+  - kundenbezogener Vorlagenfilter (optional nur kundenspezifisch)
+  - Fahrtkostenmodus pro Rechnung
+  - Fahrtstunden, KM, Stundensatz, KM-Satz (editierbar)
+  - automatische KM-Berechnung (Mandantenadresse -> Einsatzadresse)
 
 ## 4.9 Mandantenverhalten (neu)
 
@@ -240,6 +258,7 @@ Freitextsuche über u. a.:
 Bei Auswahl einer einzelnen Gruppe zeigt die Detailansicht aktuell u. a.:
 - manueller Status
 - manuelle Notiz
+- Fahrtkostenmodus und berechnete Fahrtkostenwerte
 - Status
 - automatischer Status
 - Datum
@@ -421,21 +440,21 @@ Das ist wichtig, weil die GUI damit bereits auf einer fachlich brauchbaren Grupp
 
 Noch nicht sichtbar / nicht umgesetzt im gezeigten Stand:
 
-- Mandantenauswahl
-- Anzeige von Mandantenlogo / Firmenadresse
-- Kunden-Mapping gegen CSV-Stamm
-- Artikelauswahl gegen CSV-Stamm
-- Rechnungspositionen
+- Anzeige von Mandantenlogo / Firmenadresse als visuelles Branding
 - Rechnungsadresse als editierbare Rechnungszieladresse
 - Rechnungsname / Belegtitel Lexware
 - Kundenreferenz / Bestellnummer
-- Zahlungsziel je Vorschlag
 - Exportvalidierung für Rechnungsdaten
 - Final-/PDF-Optionen
 
 Bereits vorhanden:
 - Lexware Draft Export direkt aus der GUI
 - Duplikat-Schutz gegen erneuten Export bereits exportierter Gruppen
+- Mandantenauswahl inkl. mandantenabhängigem Kunden-/Artikelkontext
+- Kunden-Matching gegen CSV-Stamm
+- Artikelauswahl gegen CSV-Stamm inkl. robuster CSV-Import-Fallbacks
+- Fahrtkostenberechnung über Routing mit Geocoding-/Koordinaten-Fallback
+- Zahlungsziel, Einleitung, Nachbemerkung und Belegtitel im Exportfluss
 
 ---
 
@@ -474,6 +493,8 @@ Das ist eine sehr gute Basis für den Rechnungs-MVP, weil bereits vorhanden sind
 - Exportgrundlagen
 
 ## Nächster Schritt
-Die GUI wird nun gezielt um Rechnungsentwurfs-Funktionen erweitert, nicht neu erfunden.
+Erster Schritt in der nächsten Sitzung:
+- aktuellen Feature-Branch abschließen und nach `main` mergen
+- danach neue `feature/...`-Branch erstellen und dort die nächsten GUI-Erweiterungen umsetzen
 
 ---

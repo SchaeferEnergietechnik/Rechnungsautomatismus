@@ -2,6 +2,7 @@
 ## Konkreter Umsetzungsplan für die nächsten Coding-Schritte
 
 Stand: 2026-06-14
+Letztes Update: 2026-06-14 (Spaet)
 
 ---
 
@@ -25,13 +26,20 @@ Bereits vorhanden:
 - Statusworkflow
 - Notizen / Verlauf / Speichern / Laden
 - Export CSV/JSON
+- Mandantenlogik inkl. mandantenabhängiger Kontakte/Artikel
+- Kunden-Matching in GUI und Mapping
+- Mehrfach-Artikel und Positionsbildung
+- Draft-Felder und Persistenz (Titel/Einleitung/Nachbemerkung/Zahlungsziel)
+- Fahrtkostenlogik inkl. Routing und Exportintegration
+- separater Angebots-/Rechnungsdialog
+- Lexware-Templates und Kunden via API (mit kundenbezogener Filterung)
+- robuster CSV-Import (Encoding-Fallback)
 
 Noch nicht vorhanden:
-- mandantenfähiger Rechnungsentwurf
-- Kunden-/Artikel-Mapping
-- Rechnungspositionen
-- Rechnungsvalidierung
-- Lexware Draft Export aus GUI
+- vollständige Rechnungsadressbearbeitung als eigene Zieladresse
+- End-to-End Feldvalidierung mit klaren Exportblockern in der GUI
+- Final-/PDF-Flow
+- Logo-/Branding-Darstellung im Hauptfenster
 
 ## Fortschritt 2026-06-14
 
@@ -50,12 +58,25 @@ Erledigt:
   - `InvoiceValidationService` ergänzt
   - `InvoiceProposalMapperService` integriert Positionen + Validierung
   - Bootstrap verdrahtet neue Services
+- Matching/Export weiter gehaertet:
+  - Kontakte-CSV-Import robust gegen Encodings (utf-8-sig/cp1252/latin-1)
+  - gematchte Kundenadresse wird fuer Lexware-Exportadresse verwendet
+  - Fahrtkosten als Hin- und Rueckfahrt berechnet
+  - Fahrtkostentext im Angebot ohne EUR-Betraege
+- Teststand: 71/71 Tests gruen.
+
+Tagesabschluss 2026-06-14:
+- Naechster erster Schritt in der naechsten Sitzung ist organisatorisch:
+  - Feature-Branch per PR abschliessen
+  - nach `main` mergen
+  - neue `feature/...`-Branch fuer die naechsten Umsetzungen starten
 
 Nächster Arbeitsblock:
-- GUI-Erweiterung für Rechnungsentwurfstransparenz:
-  - Validierungsstatus in GUI anzeigen
-  - Positionsdarstellung im Detailbereich
-  - Exportaktion bei Validierungsfehlern blockieren
+- Validierungs- und Exporthärtung:
+  - harte Exportblocker in GUI sichtbar machen
+  - Feldfehler pro Gruppe klar visualisieren
+  - Pflichtfelder vor Export vollständig prüfen
+  - Fehler-/Warnungs-Workflow für Sammel-Export ergänzen
 
 ---
 

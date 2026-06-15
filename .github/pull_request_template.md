@@ -8,6 +8,7 @@ Kurze Beschreibung, was geaendert wurde und warum.
 - [ ] GUI-Smoketest lokal durchgefuehrt
 - [ ] Keine Secrets eingecheckt (.env bleibt lokal)
 - [ ] Export-Duplikate geprueft (bereits exportierte Gruppen werden uebersprungen)
+- [ ] Dokumentation aktualisiert (mindestens README, GUI-Status, Implementierungsplan bei Verhaltensaenderungen)
 
 ## Testhinweise
 

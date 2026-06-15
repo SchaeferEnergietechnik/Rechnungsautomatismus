@@ -22,11 +22,16 @@ class CustomerMatchResult:
     state: str = "nicht_zugeordnet"
     customer_name: str = ""
     customer_number: str = ""
+    address_street: str = ""
+    address_zip: str = ""
+    address_city: str = ""
+    address_country: str = "DE"
 
 
 @dataclass
 class InvoicePosition:
     title: str
+    description: str = ""
     quantity: float = 1.0
     unit: str = "Stk"
     unit_price_net: float = 0.0
