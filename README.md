@@ -60,6 +60,19 @@ Empfohlene Umgebungsvariablen:
 - `LEXWARE_TEMPLATES_ENDPOINT` (optional, Default: `/v1/text-modules`)
 - `LEXWARE_CUSTOMERS_ENDPOINT` (optional, Default: `/v1/contacts`)
 
+Mandantenspezifische Lexware-Accounts (wichtig bei mehreren Firmen):
+- Fuer jeden Mandanten koennen die Lexware-Zugangsdaten per ENV uebersteuert werden.
+- Namensschema: `LEXWARE_<KEY>__<MANDANT_ID_IN_GROSSBUCHSTABEN>`
+- Beispiel:
+	- `ges_energietechnik` -> `LEXWARE_ACCESS_TOKEN__GES_ENERGIETECHNIK`
+	- `ges_power_service` -> `LEXWARE_ACCESS_TOKEN__GES_POWER_SERVICE`
+- Unterstuetzte Keys:
+	- `BASE_URL`, `ACCESS_TOKEN`, `CLIENT_ID`, `CLIENT_SECRET`, `REFRESH_TOKEN`, `TOKEN_URL`, `COMPANY_ID`, `DRAFT_ENDPOINT`, `TEMPLATES_ENDPOINT`, `CUSTOMERS_ENDPOINT`
+- Prioritaet/Fallback:
+	- 1) mandantenspezifische ENV
+	- 2) mandantenspezifische Werte in `config/mandants.json` (z. B. `lexware_company_id`)
+	- 3) globale `LEXWARE_*` Werte
+
 Wenn du mehrere Lexware-Accounts nutzt, kannst du je Mandant in `config/mandants.json` zusätzlich `lexware_company_id` pflegen. Der Export verwendet dann beim aktiven Mandanten diese Company-ID.
 
 Die mandantenspezifischen CSV-Dateien liegen ohne Ausnahme unter:

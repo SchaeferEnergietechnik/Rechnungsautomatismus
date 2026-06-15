@@ -365,6 +365,74 @@ def test_lexware_export_uses_active_mandant_company_id(config_loader, contacts_i
             assert kwargs["payment_term_days"] == 30
 
 
+def test_lexware_export_uses_mandant_specific_env_credentials(config_loader, contacts_importer, monkeypatch):
+    """Test: Mandantenspezifische ENV-Werte werden für Lexware-Service genutzt."""
+    from gui.main_window import MainWindow
+
+    monkeypatch.setenv("LEXWARE_BASE_URL", "https://api.global.example")
+    monkeypatch.setenv("LEXWARE_ACCESS_TOKEN", "global-token")
+    monkeypatch.setenv("LEXWARE_BASE_URL__GES_POWER_SERVICE", "https://api.power.example")
+    monkeypatch.setenv("LEXWARE_ACCESS_TOKEN__GES_POWER_SERVICE", "power-token")
+    monkeypatch.setenv("LEXWARE_COMPANY_ID__GES_POWER_SERVICE", "company-power-env")
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window._lexware_service_defaults = None
+            window.lexware_export_service = Mock(
+                base_url="https://api.global.example",
+                access_token="global-token",
+                client_id="",
+                client_secret="",
+                refresh_token="",
+                token_url="",
+                company_id="",
+                draft_endpoint="/v1/quotations",
+                templates_endpoint="/v1/text-modules",
+                customers_endpoint="/v1/contacts",
+            )
+
+            window._configure_lexware_service_for_mandant("ges_power_service")
+
+            assert window.lexware_export_service.base_url == "https://api.power.example"
+            assert window.lexware_export_service.access_token == "power-token"
+            assert window.lexware_export_service.company_id == "company-power-env"
+
+
+def test_lexware_export_blocks_groups_with_validation_errors(config_loader, contacts_importer):
+    """Test: Export wird blockiert, wenn ausgewählte Gruppen harte Validierungsfehler haben."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.lexware_export_service = Mock()
+            window.lexware_export_service.is_configured = Mock(return_value=True)
+            window._configure_lexware_service_for_mandant = Mock()
+            window._selected_groups = Mock(return_value=[
+                {
+                    "datum": "2026-04-07 00:00:00",
+                    "kunde_roh": "PowerCorp",
+                    "projekt_roh": "Projekt X",
+                    "invoice_validation_errors": 2,
+                }
+            ])
+
+            with patch('gui.main_window.QMessageBox.warning') as warning_mock:
+                window.export_selected_groups_to_lexware_draft()
+
+            warning_mock.assert_called_once()
+            window.lexware_export_service.is_configured.assert_not_called()
+
+
 def test_draft_settings_survive_project_roundtrip(config_loader, contacts_importer, tmp_path):
     """Test: Draft-Felder werden mit Projektdatei gespeichert und geladen."""
     from gui.main_window import MainWindow

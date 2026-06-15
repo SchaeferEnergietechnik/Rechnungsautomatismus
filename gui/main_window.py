@@ -1,6 +1,7 @@
 ﻿import csv
 import json
 import math
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -100,6 +101,7 @@ class MainWindow(QMainWindow):
         self._geo_cache: dict[str, tuple[float, float]] = {}
         self._lexware_customers_cache: list[dict] = []
         self._lexware_templates_cache: dict[str, list[dict]] = {}
+        self._lexware_service_defaults: dict[str, str] | None = None
 
         self.open_button = QPushButton("Datei öffnen")
         self.load_project_button = QPushButton("Projekt laden")
@@ -1254,9 +1256,85 @@ class MainWindow(QMainWindow):
 
     def _get_lexware_company_id_for_mandant(self, mandant_id: str) -> str:
         mandant = self._get_mandant_by_id(mandant_id)
-        if not mandant:
+        env_value = self._mandant_specific_lexware_env_value(mandant_id, "LEXWARE_COMPANY_ID")
+        if env_value:
+            return env_value
+
+        if mandant:
+            mandant_value = str(mandant.get("lexware_company_id", "") or "").strip()
+            if mandant_value:
+                return mandant_value
+
+        self._ensure_lexware_service_defaults()
+        if isinstance(self._lexware_service_defaults, dict):
+            return str(self._lexware_service_defaults.get("company_id", "") or "").strip()
+        return ""
+
+    def _mandant_specific_lexware_env_value(self, mandant_id: str, base_key: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9]+", "_", str(mandant_id or "").strip()).strip("_").upper()
+        if not normalized:
             return ""
-        return str(mandant.get("lexware_company_id", "") or "").strip()
+        return str(os.getenv(f"{base_key}__{normalized}", "") or "").strip()
+
+    def _ensure_lexware_service_defaults(self) -> None:
+        if getattr(self, "_lexware_service_defaults", None) is not None:
+            return
+
+        service = getattr(self, "lexware_export_service", None)
+        if service is None:
+            self._lexware_service_defaults = {}
+            return
+
+        keys = [
+            "base_url",
+            "access_token",
+            "client_id",
+            "client_secret",
+            "refresh_token",
+            "token_url",
+            "company_id",
+            "draft_endpoint",
+            "templates_endpoint",
+            "customers_endpoint",
+        ]
+        self._lexware_service_defaults = {
+            key: str(getattr(service, key, "") or "").strip()
+            for key in keys
+        }
+
+    def _configure_lexware_service_for_mandant(self, mandant_id: str) -> None:
+        service = getattr(self, "lexware_export_service", None)
+        if service is None:
+            return
+
+        self._ensure_lexware_service_defaults()
+        defaults = self._lexware_service_defaults or {}
+        mandant = self._get_mandant_by_id(mandant_id) or {}
+
+        mappings = {
+            "base_url": "LEXWARE_BASE_URL",
+            "access_token": "LEXWARE_ACCESS_TOKEN",
+            "client_id": "LEXWARE_CLIENT_ID",
+            "client_secret": "LEXWARE_CLIENT_SECRET",
+            "refresh_token": "LEXWARE_REFRESH_TOKEN",
+            "token_url": "LEXWARE_TOKEN_URL",
+            "company_id": "LEXWARE_COMPANY_ID",
+            "draft_endpoint": "LEXWARE_DRAFT_ENDPOINT",
+            "templates_endpoint": "LEXWARE_TEMPLATES_ENDPOINT",
+            "customers_endpoint": "LEXWARE_CUSTOMERS_ENDPOINT",
+        }
+
+        for attr_name, env_key in mappings.items():
+            env_override = self._mandant_specific_lexware_env_value(mandant_id, env_key)
+            cfg_override = str(mandant.get(f"lexware_{attr_name}", "") or "").strip()
+            fallback = str(defaults.get(attr_name, "") or "").strip()
+            effective = env_override or cfg_override or fallback
+            setattr(service, attr_name, effective)
+
+        token_url = str(getattr(service, "token_url", "") or "").strip()
+        base_url = str(getattr(service, "base_url", "") or "").strip()
+        if not token_url and base_url:
+            service.token_url = f"{base_url.rstrip('/')}/oauth/token"
 
     def _apply_customer_matching_for_mandant(self, mandant_id: str) -> None:
         """Wendet Customer-Matching auf alle Gruppen für den aktiven Mandanten an."""
@@ -1368,6 +1446,9 @@ class MainWindow(QMainWindow):
             return
 
         self.active_mandant_id = mandant_id
+        self._configure_lexware_service_for_mandant(mandant_id)
+        self._lexware_customers_cache = []
+        self._lexware_templates_cache = {}
         self._apply_customer_matching_for_mandant(mandant_id)
         self._refresh_articles_for_mandant(mandant_id)
         self._apply_draft_defaults_for_mandant(mandant_id)
@@ -1522,6 +1603,7 @@ class MainWindow(QMainWindow):
         service = getattr(self, "lexware_export_service", None)
         if service is None or not hasattr(service, "fetch_customers"):
             return [], "Lexware Kunden-API nicht verfügbar."
+        self._configure_lexware_service_for_mandant(self.active_mandant_id)
         if not service.is_configured():
             return [], "Lexware nicht konfiguriert."
 
@@ -1539,6 +1621,7 @@ class MainWindow(QMainWindow):
         service = getattr(self, "lexware_export_service", None)
         if service is None or not hasattr(service, "fetch_text_templates"):
             return [], "Lexware Vorlagen-API nicht verfügbar."
+        self._configure_lexware_service_for_mandant(self.active_mandant_id)
         if not service.is_configured():
             return [], "Lexware nicht konfiguriert."
 
@@ -2803,6 +2886,32 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Lexware Draft Export", "Bitte zuerst mindestens eine Gruppe auswählen.")
             return
 
+        blocked_groups = [
+            group for group in selected_groups
+            if int(group.get("invoice_validation_errors", 0) or 0) > 0
+        ]
+        if blocked_groups:
+            preview = []
+            for index, group in enumerate(blocked_groups[:10], start=1):
+                preview.append(
+                    f"{index}. {self._format_date_for_display(group.get('datum', ''))} | "
+                    f"{group.get('kunde_roh', '')} | {group.get('projekt_roh', '')} | "
+                    f"Fehler: {int(group.get('invoice_validation_errors', 0) or 0)}"
+                )
+            if len(blocked_groups) > 10:
+                preview.append(f"... +{len(blocked_groups) - 10} weitere")
+
+            QMessageBox.warning(
+                self,
+                "Lexware Draft Export blockiert",
+                "Export abgebrochen, weil ausgewählte Gruppen harte Validierungsfehler enthalten.\n\n"
+                f"Blockiert: {len(blocked_groups)} Gruppe(n)\n\n"
+                + "\n".join(preview),
+            )
+            return
+
+        self._configure_lexware_service_for_mandant(self.active_mandant_id)
+
         if self.lexware_export_service is None or not self.lexware_export_service.is_configured():
             QMessageBox.warning(
                 self,
@@ -2889,6 +2998,7 @@ class MainWindow(QMainWindow):
 
         for group in export_candidates:
             mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
+            self._configure_lexware_service_for_mandant(mandant_id)
             company_id = self._get_lexware_company_id_for_mandant(mandant_id)
             should_overwrite = is_quotation_mode and export_mode == "overwrite" and self._is_already_exported(group)
             export_reference = self._export_reference_for_group(group) if should_overwrite else ""
