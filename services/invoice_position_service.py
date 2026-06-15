@@ -197,7 +197,8 @@ class InvoicePositionService:
             travel_detail = self.travel_detail_text(group)
             if travel_detail:
                 prefix = str(positions[0].description or "").strip()
-                positions[0].description = (prefix + "\n" + travel_detail).strip() if prefix else travel_detail
+                if travel_detail not in prefix:
+                    positions[0].description = (prefix + "\n" + travel_detail).strip() if prefix else travel_detail
             return
 
         if mode == "included_in_first_article" and not positions:

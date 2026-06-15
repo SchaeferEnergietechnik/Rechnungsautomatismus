@@ -223,6 +223,7 @@ def test_payload_includes_travel_text_in_extra_article_description():
     assert len(payload["lineItems"]) == 2
     assert "Fahrtkostenangaben" not in payload["lineItems"][0]["description"]
     assert "Fahrtkostenangaben" in payload["lineItems"][1]["description"]
+    assert payload["lineItems"][1]["description"].count("Fahrtkostenangaben") == 1
     assert "10 km" in payload["lineItems"][1]["description"]
     assert "EUR" not in payload["lineItems"][1]["description"]
 
@@ -249,6 +250,7 @@ def test_payload_includes_travel_text_in_first_article_description_when_included
 
     assert len(payload["lineItems"]) == 1
     assert "Fahrtkostenangaben" in payload["lineItems"][0]["description"]
+    assert payload["lineItems"][0]["description"].count("Fahrtkostenangaben") == 1
     assert "2.00 h" in payload["lineItems"][0]["description"]
     assert "EUR" not in payload["lineItems"][0]["description"]
 

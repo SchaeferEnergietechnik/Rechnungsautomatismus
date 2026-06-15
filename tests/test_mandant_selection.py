@@ -955,6 +955,102 @@ def test_apply_quick_article_reference_without_valid_entries_shows_warning(confi
             window._set_selected_articles_for_group.assert_not_called()
 
 
+def test_apply_quick_article_reference_to_multiple_selected_groups(config_loader, contacts_importer):
+    """Test: Schnellreferenz wird bei Mehrfachauswahl auf alle selektierten Gruppen angewendet."""
+    from gui.main_window import MainWindow
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "A"},
+                {"Artikelnummer": "PS-2", "Bezeichnung": "B"},
+                {"Artikelnummer": "PS-3", "Bezeichnung": "C"},
+            ]
+
+            group_a = {"kunde_roh": "PowerCorp", "selected_articles": []}
+            group_b = {"kunde_roh": "PowerCorp", "selected_articles": []}
+            window.visible_groups = [group_a, group_b]
+            window._selected_rows = Mock(return_value=[0, 1])
+
+            input_widget = Mock()
+            input_widget.text = Mock(return_value="3,1")
+            window.article_quick_select_input = input_widget
+
+            window._set_selected_articles_for_group = Mock()
+            window._mark_changed = Mock()
+            window._save_manual_data = Mock()
+            window._refresh_group_invoice_proposal = Mock()
+            window._refresh_article_editor_for_group = Mock()
+            window.refresh_table = Mock()
+            window._select_groups_by_keys = Mock()
+            window._build_group_key = Mock(side_effect=["a", "b"])
+            window._log_action = Mock()
+
+            window.apply_quick_article_reference_for_group()
+
+            assert window._set_selected_articles_for_group.call_count == 2
+            first_args = window._set_selected_articles_for_group.call_args_list[0].args
+            second_args = window._set_selected_articles_for_group.call_args_list[1].args
+            assert first_args[0] is group_a
+            assert second_args[0] is group_b
+            assert [item["Artikelnummer"] for item in first_args[1]] == ["PS-3", "PS-1"]
+            assert [item["Artikelnummer"] for item in second_args[1]] == ["PS-3", "PS-1"]
+
+
+def test_customer_defaults_apply_travel_mode_and_article_references(config_loader, contacts_importer):
+    """Test: Kundenvorgaben setzen Fahrtkostenmodus und Standardartikel, wenn noch nichts gesetzt ist."""
+    from gui.main_window import MainWindow
+
+    config_loader.load_json = Mock(return_value={
+        "mandants": [
+            {
+                "id": "ges_power_service",
+                "display_name": "G.E.S. Power Service GmbH",
+                "contacts_csv": "data/ges_power_service/contacts.csv",
+                "products_csv": "data/ges_power_service/produkte_services.csv",
+                "customer_defaults": [
+                    {
+                        "match": {"customer_name_contains": "faber e-tec"},
+                        "travel_mode": "included_in_first_article",
+                        "article_references": "2,1",
+                    }
+                ],
+            }
+        ]
+    })
+
+    with patch('gui.main_window.QApplication'):
+        with patch.object(MainWindow, '__init__', lambda x: None):
+            window = MainWindow()
+            window.config_loader = config_loader
+            window.contacts_importer = contacts_importer
+            window.mandants = window._load_mandants()
+            window.active_mandant_id = "ges_power_service"
+            window.current_articles = [
+                {"Artikelnummer": "PS-1", "Bezeichnung": "Artikel 1"},
+                {"Artikelnummer": "PS-2", "Bezeichnung": "Artikel 2"},
+            ]
+
+            group = {
+                "mandant_id": "ges_power_service",
+                "kunde_roh": "Faber E-Tec GmbH",
+                "customer_match_name": "Faber E-Tec GmbH",
+                "selected_articles": [],
+                "selected_article": {},
+                "travel_mode": "extra_article",
+                "travel_values_source": "",
+            }
+
+            changed = window._apply_customer_defaults_for_group(group)
+
+            assert changed is True
+            assert group["travel_mode"] == "included_in_first_article"
+            assert [item["Artikelnummer"] for item in group["selected_articles"]] == ["PS-2", "PS-1"]
+
+
 def test_mandant_defaults_fill_draft_fields(config_loader, contacts_importer):
     """Test: Mandanten-Standardwerte werden in die Draft-Felder übernommen."""
     from gui.main_window import MainWindow

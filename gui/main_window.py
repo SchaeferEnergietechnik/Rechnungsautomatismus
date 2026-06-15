@@ -1525,8 +1525,15 @@ class MainWindow(QMainWindow):
         )
 
     def apply_quick_article_reference_for_group(self) -> None:
-        group = self._current_group_for_article_editing()
-        if group is None:
+        selected_rows = self._selected_rows()
+        if len(selected_rows) > 1:
+            target_groups = [self.visible_groups[row] for row in selected_rows if 0 <= row < len(self.visible_groups)]
+            active_group = target_groups[0] if target_groups else None
+        else:
+            active_group = self._current_group_for_article_editing()
+            target_groups = [active_group] if active_group is not None else []
+
+        if not target_groups:
             return
 
         input_widget = getattr(self, "article_quick_select_input", None)
@@ -1548,11 +1555,28 @@ class MainWindow(QMainWindow):
             )
             return
 
-        self._set_selected_articles_for_group(group, resolved_articles)
-        self._mark_changed([group])
+        for group in target_groups:
+            self._set_selected_articles_for_group(group, resolved_articles)
+        self._mark_changed(target_groups)
         self._save_manual_data()
-        self._refresh_article_editor_for_group(group)
-        self._refresh_group_view_after_article_change(group)
+
+        if len(target_groups) == 1 and active_group is not None:
+            self._refresh_article_editor_for_group(active_group)
+            self._refresh_group_view_after_article_change(active_group)
+        else:
+            if getattr(self, "invoice_mapper", None) is not None:
+                for group in target_groups:
+                    self._refresh_group_invoice_proposal(group)
+
+            self._refresh_article_editor_for_group(active_group)
+            self.refresh_table()
+            self._select_groups_by_keys([self._build_group_key(group) for group in target_groups])
+
+        target_label = (
+            self._label_for_template_key(active_group)
+            if len(target_groups) == 1 and active_group is not None
+            else f"{len(target_groups)} Gruppen"
+        )
 
         if invalid_tokens:
             QMessageBox.information(
@@ -1563,7 +1587,7 @@ class MainWindow(QMainWindow):
             )
 
         self._log_action(
-            f"Schnellreferenz angewendet | {self._label_for_template_key(group)} | {reference_text}"
+            f"Schnellreferenz angewendet | {target_label} | {reference_text}"
         )
 
     def _set_selected_articles_for_group(self, group: dict, articles: list[dict]) -> None:
@@ -1979,7 +2003,10 @@ class MainWindow(QMainWindow):
 
         for group in self.groups:
             proposal = self.invoice_mapper.map_group(group, contacts=contacts)
-            self._apply_proposal_to_group(group, proposal)
+            defaults_changed = self._apply_proposal_to_group(group, proposal)
+            if defaults_changed:
+                proposal = self.invoice_mapper.map_group(group, contacts=contacts)
+                self._apply_proposal_to_group(group, proposal)
 
     def _refresh_group_invoice_proposal(self, group: dict) -> None:
         if self.invoice_mapper is None:
@@ -1989,9 +2016,12 @@ class MainWindow(QMainWindow):
         group["mandant_id"] = mandant_id
         contacts = self._load_contacts_for_mandant(mandant_id)
         proposal = self.invoice_mapper.map_group(group, contacts=contacts)
-        self._apply_proposal_to_group(group, proposal)
+        defaults_changed = self._apply_proposal_to_group(group, proposal)
+        if defaults_changed:
+            proposal = self.invoice_mapper.map_group(group, contacts=contacts)
+            self._apply_proposal_to_group(group, proposal)
 
-    def _apply_proposal_to_group(self, group: dict, proposal) -> None:
+    def _apply_proposal_to_group(self, group: dict, proposal) -> bool:
         match = proposal.customer_match
         group["customer_match_state"] = str(match.state or "nicht_zugeordnet")
         group["customer_match_name"] = str(match.customer_name or "")
@@ -2050,6 +2080,8 @@ class MainWindow(QMainWindow):
             preview_lines.append(f"... +{remaining_count} weitere Position(en)")
         group["invoice_positions_preview"] = preview_lines
 
+        return self._apply_customer_defaults_for_group(group)
+
     def _on_mandant_changed_combo(self) -> None:
         """Handler für Mandantenwechsel im Dropdown."""
         mandant_id = self.mandant_combo.currentData()
@@ -2065,8 +2097,8 @@ class MainWindow(QMainWindow):
         self._configure_lexware_service_for_mandant(mandant_id)
         self._lexware_customers_cache = []
         self._lexware_templates_cache = {}
-        self._apply_customer_matching_for_mandant(mandant_id)
         self._refresh_articles_for_mandant(mandant_id)
+        self._apply_customer_matching_for_mandant(mandant_id)
         self._apply_draft_defaults_for_mandant(mandant_id)
         self._refresh_article_template_combo_for_group(self._current_group_for_article_editing())
         self._save_manual_data()
@@ -2641,10 +2673,87 @@ class MainWindow(QMainWindow):
         self._update_draft_preview()
 
     def _default_travel_mode_for_group(self, group: dict) -> str:
+        customer_defaults = self._customer_defaults_for_group(group)
+        configured_mode = str((customer_defaults or {}).get("travel_mode", "") or "").strip()
+        if configured_mode in {"extra_article", "included_in_first_article"}:
+            return configured_mode
+
         customer = str((group or {}).get("kunde_roh", "") or "").strip().lower()
         if "faber etec" in customer:
             return "included_in_first_article"
         return "extra_article"
+
+    def _customer_defaults_for_group(self, group: dict) -> dict:
+        active_mandant_id = str(getattr(self, "active_mandant_id", "") or "")
+        mandant_id = str((group or {}).get("mandant_id", active_mandant_id) or active_mandant_id)
+        mandants = getattr(self, "mandants", [])
+        mandant = {}
+        if isinstance(mandants, list):
+            for entry in mandants:
+                if isinstance(entry, dict) and str(entry.get("id", "") or "") == mandant_id:
+                    mandant = entry
+                    break
+        raw_defaults = mandant.get("customer_defaults", [])
+        defaults = raw_defaults if isinstance(raw_defaults, list) else []
+
+        for entry in defaults:
+            if not isinstance(entry, dict):
+                continue
+            if self._customer_default_matches_group(entry, group):
+                return entry
+        return {}
+
+    def _customer_default_matches_group(self, entry: dict, group: dict) -> bool:
+        match_config = entry.get("match", entry)
+        if not isinstance(match_config, dict):
+            return False
+
+        customer_number = str((group or {}).get("customer_match_number", "") or "").strip().lower()
+        customer_match_name = str((group or {}).get("customer_match_name", "") or "").strip().lower()
+        customer_raw_name = str((group or {}).get("kunde_roh", "") or "").strip().lower()
+
+        expected_number = str(match_config.get("customer_number", "") or "").strip().lower()
+        if expected_number and customer_number != expected_number:
+            return False
+
+        expected_name = str(match_config.get("customer_name", "") or "").strip().lower()
+        if expected_name and customer_match_name != expected_name:
+            return False
+
+        expected_name_contains = str(match_config.get("customer_name_contains", "") or "").strip().lower()
+        if expected_name_contains and expected_name_contains not in customer_match_name and expected_name_contains not in customer_raw_name:
+            return False
+
+        expected_raw_contains = str(match_config.get("customer_raw_contains", "") or "").strip().lower()
+        if expected_raw_contains and expected_raw_contains not in customer_raw_name:
+            return False
+
+        return bool(expected_number or expected_name or expected_name_contains or expected_raw_contains)
+
+    def _apply_customer_defaults_for_group(self, group: dict) -> bool:
+        defaults = self._customer_defaults_for_group(group)
+        if not defaults:
+            return False
+
+        changed = False
+
+        configured_mode = str(defaults.get("travel_mode", "") or "").strip()
+        if configured_mode in {"extra_article", "included_in_first_article"}:
+            current_mode = str(group.get("travel_mode", "") or "").strip()
+            source = str(group.get("travel_values_source", "") or "").strip().lower()
+            if source != "manual" and (not current_mode or current_mode == "extra_article") and current_mode != configured_mode:
+                group["travel_mode"] = configured_mode
+                changed = True
+
+        raw_references = str(defaults.get("article_references", "") or "").strip()
+        has_articles = bool(self._selected_articles_for_group(group)) or bool(group.get("selected_article", {}))
+        if raw_references and not has_articles:
+            resolved_articles, _ = self._resolve_articles_from_reference(raw_references)
+            if resolved_articles:
+                self._set_selected_articles_for_group(group, resolved_articles)
+                changed = True
+
+        return changed
 
     def _ensure_travel_fields_for_group(self, group: dict) -> None:
         default_mode = self._default_travel_mode_for_group(group)

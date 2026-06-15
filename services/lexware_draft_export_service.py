@@ -787,24 +787,14 @@ class LexwareDraftExportService:
         if not proposal.positions:
             return [self._build_line_item(project_name, description_parts)]
 
-        travel_mode = str(group.get("travel_mode", "extra_article") or "extra_article").strip()
-        travel_detail = self.position_service.travel_detail_text(group)
-
         line_items = []
-        for index, position in enumerate(proposal.positions):
+        for position in proposal.positions:
             tax_rate = float(position.tax_rate or self.default_tax_rate)
             net = float(position.unit_price_net or self.default_net_amount)
             gross = round(net * (1 + (tax_rate / 100.0)), 2)
 
             base_description = str(getattr(position, "description", "") or "").strip()
             line_description_parts = [base_description] if base_description else [part for part in description_parts if part]
-            if travel_detail:
-                is_first_item = index == 0
-                is_travel_item = "fahrtkosten" in str(position.title or "").strip().lower()
-                if travel_mode == "included_in_first_article" and is_first_item and travel_detail not in line_description_parts:
-                    line_description_parts.append(travel_detail)
-                elif travel_mode == "extra_article" and is_travel_item and travel_detail not in line_description_parts:
-                    line_description_parts.append(travel_detail)
 
             line_items.append(
                 {

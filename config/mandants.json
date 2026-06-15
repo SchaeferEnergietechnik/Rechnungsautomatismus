@@ -24,6 +24,15 @@
         "Bei Rückfragen stehen wir Ihnen jederzeit zur Verfügung.",
         "Zahlungsziel gemäß Vereinbarung. Vielen Dank für Ihren Auftrag."
       ],
+      "customer_defaults": [
+        {
+          "match": {
+            "customer_name_contains": "faber e-tec"
+          },
+          "travel_mode": "included_in_first_article",
+          "article_references": "13,12"
+        }
+      ],
       "logo_path": "assets/logos/ges_energietechnik.png"
     },
     {
@@ -49,6 +58,15 @@
         "Erzeugt durch Rechnungsautomatismus",
         "Bei Rückfragen stehen wir Ihnen jederzeit zur Verfügung.",
         "Zahlungsziel gemäß Vereinbarung. Vielen Dank für Ihren Auftrag."
+      ],
+      "customer_defaults": [
+        {
+          "match": {
+            "customer_name_contains": "faber e-tec"
+          },
+          "travel_mode": "included_in_first_article",
+          "article_references": "13,12"
+        }
       ],
       "logo_path": "assets/logos/ges_power_service.png"
     }
