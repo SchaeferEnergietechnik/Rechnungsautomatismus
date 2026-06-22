@@ -308,7 +308,7 @@ class MainWindow(QMainWindow):
         self.table_widget.horizontalHeader().setStretchLastSection(False)
         self.table_widget.horizontalHeader().setSectionsClickable(True)
         self.table_widget.horizontalHeader().setSortIndicatorShown(True)
-        self.table_widget.horizontalHeader().setMovable(True)
+        self.table_widget.horizontalHeader().setSectionsMovable(True)
         self.table_widget.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.table_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table_widget.customContextMenuRequested.connect(self.open_context_menu)
