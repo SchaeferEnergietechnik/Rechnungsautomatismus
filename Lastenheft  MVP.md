@@ -1,17 +1,21 @@
 # LASTENHEFT / MVP
 ## Rechnungstool für Lexware-Rechnungsentwürfe
 
-Stand: 2026-06-15
+Stand: 2026-06-22
 Status: MVP-Fassung mit umgesetzten Erweiterungen
 
-Arbeitsstand 2026-06-15:
-- Teststand: 88/88 Tests gruen.
+Arbeitsstand 2026-06-22:
+- Teststand: 109/109 Tests gruen.
 - Feature-Stand ist in `main` enthalten.
 - CI auf `main` ist gruen.
 - Rueckwaertige Bearbeitung bestehender Lexware-Invoices/Quotations per allgemeinem Listen-/Finalisierungsdialog ist laut offizieller API-Doku nicht Teil des MVP.
 - Kundenspezifische Artikelsatz-Vorlagen sind umgesetzt.
 - Schnellreferenz fuer Artikelauswahl (z. B. `1,4,7`) ist umgesetzt.
 - Wahlregeln fuer Weiterfahrt und Mehrtagespauschale (Tag 1/Tag 2) sind umgesetzt.
+- PDF/Link-Flow fuer erzeugte Belege ist umgesetzt.
+- PDF-Download nach Export ist umgesetzt.
+- Spaltenverschiebung in der Haupttabelle inkl. Sitzungs-Persistenz ist umgesetzt.
+- RE-Filter startet standardmaessig mit "Nur ohne RE-x".
 
 ---
 
@@ -40,7 +44,7 @@ Die erste produktiv nutzbare Version muss:
 Nicht Bestandteil des MVP:
 
 - finale Rechnung direkt erzeugen
-- PDF automatisch herunterladen oder öffnen
+- Angebotsuebernahme in Rechnung fuer bereits bestehende Lexware-Belege
 - Angebote automatisch in Rechnungen überführen
 - komplexe Rundreiseautomatik
 - vollstaendiges Vorlagen-/Favoritensystem (jenseits Basis-Textvorlagen)
@@ -528,17 +532,15 @@ Vor Export wird geprüft:
 ## Nur:
 - **Draft**
 
-Nicht im MVP:
-- Final/Open
-- Final + PDF
+Produktstand (Zusatz zum MVP-Kern):
+- Draft/Finalisieren sind im Exportdialog verfuegbar
+- PDF-Download nach erfolgreichem Export ist verfuegbar
 
 ---
 
 # 29. Spätere Ausbaustufen
 
 Nicht MVP, aber geplant:
-- PDF herunterladen
-- PDF per Button öffnen
 - Final-Export
 - erweitertes Vorlagen-/Favoritensystem
 - Favoriten / Schnellcodes
@@ -549,7 +551,7 @@ Nicht MVP, aber geplant:
 
 ---
 
-# 32. Umgesetzter Zusatzstand (2026-06-14)
+# 32. Umgesetzter Zusatzstand (2026-06-22)
 
 Bereits umgesetzt und im laufenden Stand aktiv:
 - Mandantenabhaengige Kontakte und Artikel
@@ -559,6 +561,10 @@ Bereits umgesetzt und im laufenden Stand aktiv:
 - Fahrtkostenlogik mit Routing, manueller Uebersteuerung und Exportintegration
 - separates Angebots-/Rechnungsdialogfenster
 - Lexware API-Anbindung fuer Kunden und Textvorlagen inkl. kundenbezogenem Filter
+- PDF/Link-Flow fuer erzeugte Lexware-Belege
+- PDF-Download nach Export in konfigurierbares Zielverzeichnis
+- Spaltenverschiebung (Drag-and-Drop) in der Haupttabelle inkl. Sitzungs-Persistenz
+- RE-Filter-Standard auf "Nur ohne RE-x"
 
 ---
 

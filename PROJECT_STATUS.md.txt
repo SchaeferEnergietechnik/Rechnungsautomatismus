@@ -1,8 +1,25 @@
 # PROJECT STATUS
 ## Rechnungstool – aktueller Ist-Stand
 
-Stand: 2026-06-15
-Aktueller Teststand: 103/103 Tests gruen (`pytest -q`)
+Stand: 2026-06-22
+Aktueller Teststand: 109/109 Tests gruen (`pytest -q`)
+
+## Update 2026-06-22 (PDF-Flow + Tabellenreihenfolge + Windows-Fix)
+
+- PDF/Link-Flow nach Export umgesetzt:
+  - Erfolgsdialog bietet "In Lexware oeffnen"
+  - URL-Bildung ueber `LEXWARE_WEB_URL_TEMPLATE`
+- PDF-Download nach Export umgesetzt:
+  - Schaltbar per `LEXWARE_PDF_DOWNLOAD_ENABLED`
+  - Zielordner per `LEXWARE_PDF_DOWNLOADS_DIRECTORY`
+  - API-Endpoint per `LEXWARE_VOUCHER_PDF_ENDPOINT_TEMPLATE`
+- GUI verbessert:
+  - Spalten per Drag-and-Drop verschiebbar
+  - Spaltenreihenfolge wird in Sitzungen gespeichert/wiederhergestellt
+  - RE-Filter startet standardmaessig bei "Nur ohne RE-x"
+- Kompatibilitaet:
+  - PySide6-Header-API auf `setSectionsMovable` korrigiert
+  - behebt lokalen Windows-Startfehler bei `python -m app.main`
 
 ## Update 2026-06-15 (Exportsteuerung + Titelfix)
 
@@ -129,8 +146,10 @@ und soll als nächster großer Schritt erweitert werden zu:
 
 ## Nächster Schritt (gemerkt für nächste Sitzung)
 
-- Nächster fachlicher Schritt:
-  - optionalen PDF-Open/Download-Flow fuer bekannte Lexware-Beleg-ID separat planen (nicht MVP-Basisfluss)
+- Optional als naechste Ausbaustufe:
+  - separates, editierbares Feld fuer Rechnungsadresse im Dialog
+  - optionales Titel-Template mit Platzhaltern (z. B. `{typ} - {projekt}`)
+  - Angebotsuebernahme nur, wenn Lexware dafuer einen stabilen API-Weg bietet
 
 ---
 

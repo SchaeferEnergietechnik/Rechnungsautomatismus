@@ -1,7 +1,7 @@
 # NEXT STEPS
 ## Nächste Entwicklungsschritte vom aktuellen Stand zum Rechnungs-MVP
 
-Stand: 2026-06-15
+Stand: 2026-06-22
 
 ---
 
@@ -30,12 +30,10 @@ Bereits vorhanden:
 - Statusworkflow
 
 ## Nächster Fokus
-Jetzt ergänzen:
-- Rechnungsentwurfslogik
-- Mandantenfähigkeit
-- Kunden-/Artikelstamm-Mapping
-- Rechnungspositionen
-- Lexware Draft Export
+Jetzt konsolidieren und optional ausbauen:
+- Stabilitaet und Plattform-Kompatibilitaet halten
+- UX-Feinschliff im Rechnungsdialog
+- nur klar abgegrenzte Zusatzfeatures ergaenzen
 
 ## Update 2026-06-14
 
@@ -92,8 +90,19 @@ Bereits umgesetzt:
 - Teststand aktuell: 103/103.
 
 Als nächstes umsetzen:
-- Optionalen PDF-Open-Flow fuer bekannte Lexware-Beleg-ID als separaten Arbeitsblock planen.
+- Optional: separates editierbares Feld fuer Rechnungsadresse im Angebots-/Rechnungsdialog.
 - Optional: explizites Titel-Template-Feld mit Platzhaltern (z. B. `{typ} - {projekt}`) anbieten.
+- Optional: Angebotsuebernahme nur bei verifiziertem API-Weg und klarer Fehlerstrategie.
+
+## Update 2026-06-22
+
+Bereits umgesetzt:
+- PDF/Link-Flow nach Export (Button "In Lexware oeffnen").
+- PDF-Download nach Export in konfiguriertes Verzeichnis.
+- Spaltenreihenfolge per Drag-and-Drop inkl. Sitzungs-Persistenz.
+- RE-Filter-Default auf "Nur ohne RE-x" gesetzt.
+- PySide6-Kompatibilitaetsfix fuer Tabellen-Header (`setSectionsMovable`).
+- Teststand aktuell: 109/109.
 
 ---
 

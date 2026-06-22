@@ -1,7 +1,7 @@
 # Rechnungsautomatismus
 Es wird ein Tool, welches Anhand der Temine Excel Rechnungen für Lexware vorbereitet
 
-## Stand 2026-06-15
+## Stand 2026-06-22
 
 Aktueller Funktionsstand:
 - Mandantenspezifische Kontakte und Artikel aus CSV sind aktiv.
@@ -45,7 +45,22 @@ Aktueller Funktionsstand:
 - Standard-Belegtitel ist je Gruppe dynamisch:
 	- `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
 	- Auto-Titel werden pro Gruppe neu berechnet (kein Carry-over auf Folgerechnungen)
-- Teststand: 103/103 Tests gruen (`pytest -q`).
+- PDF/Link-Flow ist umgesetzt:
+	- Erfolgsdialog zeigt Button "In Lexware oeffnen"
+	- URL ist konfigurierbar ueber `LEXWARE_WEB_URL_TEMPLATE`
+- PDF-Download nach Export ist umgesetzt:
+	- Aktivierung ueber `LEXWARE_PDF_DOWNLOAD_ENABLED=true`
+	- Zielordner ueber `LEXWARE_PDF_DOWNLOADS_DIRECTORY`
+	- API-Endpoint ueber `LEXWARE_VOUCHER_PDF_ENDPOINT_TEMPLATE`
+- Tabellen-Header unterstuetzt Spaltenverschiebung mit Sitzungs-Persistenz.
+- RE-Filter startet standardmaessig mit "Nur ohne RE-x".
+- PySide6-Kompatibilitaetsfix fuer Header-Drag-and-Drop aktiv (`setSectionsMovable`).
+- Teststand: 109/109 Tests gruen (`pytest -q`).
+
+Update 2026-06-22:
+- PDF/Link-Flow und PDF-Download sind in `main` enthalten.
+- Spaltenreihenfolge ist per Drag-and-Drop veraenderbar und wird in der Sitzung gespeichert.
+- Windows/PySide6-Fehler bei `QHeaderView.setMovable` wurde behoben.
 
 Update 2026-06-15:
 - Stand aus `feature/mandant-specific-data` ist nach `main` gemerged.
@@ -107,8 +122,9 @@ Wichtige API-Grenze laut offizieller Lexware-Doku:
 - Bestehende Invoices/Quotations sollen nicht ueber einen allgemeinen Listen-Dialog per API geladen werden.
 - Die Finalisierung ist fuer diese Belegtypen beim Erzeugen ueber `finalize=true` vorgesehen, nicht nachtraeglich per PUT/PATCH.
 
-Aktuell noch offen (naechster Ausbau):
-- PDF-Open/Download-Flow fuer bekannte Lexware-Beleg-ID
+Umgesetzt 2026-06-22:
+- PDF-Open-Flow fuer erzeugte Belege im Erfolgs-/Fehlerdialog
+- PDF-Download fuer erzeugte Belege nach erfolgreichem Export
 
 Fahrtkostenlogik (MVP):
 - Startadresse: aktive Mandantenadresse aus `config/mandants.json`

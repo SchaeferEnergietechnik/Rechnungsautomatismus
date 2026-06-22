@@ -25,7 +25,7 @@ Kurzstatistik:
   - Weiterfahrt-Zuordnung (Tag 1 / Tag 2)
   - Mehrtagespauschale-Zuordnung (Tag 1 / Tag 2)
 - PDF/Link-Flow nach Export: Button "In Lexware öffnen" im Erfolgs-Dialog öffnet erstellte Belege im Browser
-  - konfigurierbar üeber `LEXWARE_WEB_URL_TEMPLATE` (z. B. `https://app.lexoffice.de/vouchers/{id}`)
+  - konfigurierbar ueber `LEXWARE_WEB_URL_TEMPLATE` (z. B. `https://app.lexoffice.de/vouchers/{id}`)
   - Fallback: resourceUri direkt wenn HTTP-URL, sonst kein Button
 - PDF-Download nach Export: Automatischer Download in konfiguriertes Verzeichnis
   - aktivierbar per `LEXWARE_PDF_DOWNLOAD_ENABLED=true`
@@ -33,6 +33,7 @@ Kurzstatistik:
   - Dateiname automatisch generiert aus Datum, Kunde und Beleg-ID
 - Spalten in der Haupt-Tabelle können durch Drag-and-Drop verschoben werden
   - Spaltenanordnung wird in der Sitzung gespeichert und wiederhergestellt
+  - PySide6-kompatibel ueber Header-API `setSectionsMovable`
 
 ---
 
