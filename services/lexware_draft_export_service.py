@@ -2,6 +2,7 @@ import json
 import os
 import re
 from datetime import datetime, timedelta
+from pathlib import Path
 from urllib import parse
 from urllib import error, request
 
@@ -24,6 +25,10 @@ class LexwareDraftExportService:
         self.default_net_amount = self._safe_float(os.getenv("LEXWARE_DEFAULT_NET_AMOUNT", "1.0"), 1.0)
         self.default_tax_rate = self._safe_float(os.getenv("LEXWARE_DEFAULT_TAX_RATE", "19.0"), 19.0)
         self.default_payment_term_days = self._safe_int(os.getenv("LEXWARE_PAYMENT_TERM_DAYS", "14"), 14)
+        self.web_url_template = os.getenv("LEXWARE_WEB_URL_TEMPLATE", "").strip()
+        self.pdf_download_enabled = str(os.getenv("LEXWARE_PDF_DOWNLOAD_ENABLED", "false")).lower() in ("true", "1", "yes")
+        self.pdf_downloads_directory = os.getenv("LEXWARE_PDF_DOWNLOADS_DIRECTORY", "").strip()
+        self.pdf_endpoint_template = os.getenv("LEXWARE_VOUCHER_PDF_ENDPOINT_TEMPLATE", "/v1/vouchers/{id}/files/document").strip() or "/v1/vouchers/{id}/files/document"
         self.position_service = InvoicePositionService()
 
         if not self.token_url and self.base_url:
@@ -33,6 +38,93 @@ class LexwareDraftExportService:
         has_direct_access = bool(self.access_token)
         has_refresh_flow = bool(self.refresh_token and self.client_id and self.client_secret and self.token_url)
         return bool(self.base_url and (has_direct_access or has_refresh_flow))
+
+    def build_web_url(self, resource_uri_or_id: str) -> str:
+        """Gibt eine im Browser öffenbare URL für einen Lexware-Beleg zurück.
+
+        Wenn ``LEXWARE_WEB_URL_TEMPLATE`` konfiguriert ist (z. B.
+        ``https://app.lexoffice.de/vouchers/{id}``), wird die ID aus
+        *resource_uri_or_id* extrahiert und das Template befüllt.
+        Andernfalls wird die *resourceUri* direkt zurückgegeben, sofern sie
+        mit ``http`` beginnt – sonst ein leerer String.
+        """
+        value = str(resource_uri_or_id or "").strip()
+        if not value:
+            return ""
+        if self.web_url_template and "{id}" in self.web_url_template:
+            voucher_id = value.rstrip("/").split("/")[-1]
+            return self.web_url_template.replace("{id}", voucher_id)
+        if value.startswith("http"):
+            return value
+        return ""
+
+    def download_voucher_pdf(self, voucher_id: str, company_id: str = "", filename: str = "") -> dict:
+        """Lädt ein PDF eines Lexware-Belegs herunter und speichert es lokal.
+        
+        Args:
+            voucher_id: Die ID des Belegs
+            company_id: Optional die Unternehmens-ID für den Header
+            filename: Optional ein Dateiname (ohne Verzeichnis); sonst auto-generiert
+        
+        Returns:
+            dict mit Keys:
+            - success (bool): ob Download erfolgreich war
+            - filepath (str): lokaler Pfad der gespeicherten Datei
+            - error (str): Fehlermeldung wenn nicht erfolgreich
+        """
+        if not self.pdf_download_enabled or not self.pdf_downloads_directory:
+            return {"success": False, "filepath": "", "error": "PDF-Download nicht konfiguriert"}
+        
+        if not self.access_token:
+            refresh_result = self._refresh_access_token()
+            if not refresh_result.get("success"):
+                return {
+                    "success": False,
+                    "filepath": "",
+                    "error": f"Token-Refresh fehlgeschlagen: {refresh_result.get('error')}",
+                }
+        
+        # Zielverzeichnis erstellen wenn nicht vorhanden
+        try:
+            Path(self.pdf_downloads_directory).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            return {"success": False, "filepath": "", "error": f"Verzeichnis erstellen fehlgeschlagen: {str(e)}"}
+        
+        # URL bauen
+        pdf_endpoint = self.pdf_endpoint_template.replace("{id}", voucher_id)
+        url = f"{self.base_url.rstrip('/')}{pdf_endpoint}"
+        
+        # Dateinamen generieren wenn nicht vorhanden
+        if not filename:
+            filename = f"beleg_{voucher_id}.pdf"
+        filepath = str(Path(self.pdf_downloads_directory) / filename)
+        
+        # PDF herunterladen
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Accept": "application/pdf",
+        }
+        effective_company_id = str(company_id or self.company_id).strip()
+        if effective_company_id:
+            headers["X-LX-Company-ID"] = effective_company_id
+        
+        req = request.Request(url, headers=headers, method="GET")
+        
+        try:
+            with request.urlopen(req, timeout=30) as resp:
+                content = resp.read()
+                with open(filepath, "wb") as f:
+                    f.write(content)
+                return {"success": True, "filepath": filepath, "error": ""}
+        except error.HTTPError as exc:
+            text = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+            return {
+                "success": False,
+                "filepath": "",
+                "error": f"HTTP {exc.code}: {text[:200]}",
+            }
+        except Exception as e:
+            return {"success": False, "filepath": "", "error": f"Download fehlgeschlagen: {str(e)}"}
 
     def export_group_as_draft(
         self,

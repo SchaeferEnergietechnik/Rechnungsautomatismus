@@ -604,3 +604,32 @@ def test_auto_title_template_is_recomputed_per_group():
 
     assert first_payload["title"] == "Angebot - Neutraubling"
     assert second_payload["title"] == "Angebot - Vohenstrauß"
+
+
+def test_build_web_url_with_template(monkeypatch):
+    monkeypatch.setenv("LEXWARE_WEB_URL_TEMPLATE", "https://app.lexoffice.de/vouchers/{id}")
+    service = LexwareDraftExportService()
+
+    # resourceUri enthält UUID am Ende
+    url = service.build_web_url("https://api.lexware.io/v1/quotations/abc-123")
+    assert url == "https://app.lexoffice.de/vouchers/abc-123"
+
+    # bare ID
+    url = service.build_web_url("uuid-456")
+    assert url == "https://app.lexoffice.de/vouchers/uuid-456"
+
+
+def test_build_web_url_fallback_to_resource_uri(monkeypatch):
+    monkeypatch.delenv("LEXWARE_WEB_URL_TEMPLATE", raising=False)
+    service = LexwareDraftExportService()
+
+    # resourceUri ist direkt nutzbar wenn HTTP-URL
+    url = service.build_web_url("https://api.lexware.io/v1/quotations/abc-123")
+    assert url == "https://api.lexware.io/v1/quotations/abc-123"
+
+    # bare ID ohne URL-Präfix → kein Fallback
+    url = service.build_web_url("uuid-456")
+    assert url == ""
+
+    # leer → leer
+    assert service.build_web_url("") == ""

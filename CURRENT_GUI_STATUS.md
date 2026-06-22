@@ -1,11 +1,11 @@
 # CURRENT GUI STATUS
 ## Aktueller Stand der vorhandenen GUI
 
-Stand: 2026-06-15
-Letztes Update: 2026-06-15
+Stand: 2026-06-22 (2. Update)
+Letztes Update: 2026-06-22
 
 Kurzstatistik:
-- Teststand: 103/103 Tests gruen (`pytest -q`)
+- Teststand: 109/109 Tests gruen (`pytest -q`)
 - Kundenadresse im Export aus Kundenmatch statt Projektadresse
 - Fahrtkostenberechnung als Hin- und Rueckfahrt
 - GUI zeigt Validierungsstatus in der Tabelle
@@ -16,7 +16,7 @@ Kurzstatistik:
 - Rundreisen fuer Kundentag mit mehreren Projekten werden segmentweise verteilt
 - Kundenspezifische Artikelsatz-Vorlagen vorhanden (speichern/anwenden)
 - Schnellreferenz fuer Artikelauswahl vorhanden (z. B. `1,4,7`)
-- RE-Filter vorhanden (Alle RE / Nur ohne RE-x / Nur mit RE-x)
+- RE-Filter vorhanden (Alle RE / Nur ohne RE-x / Nur mit RE-x) mit Standard "Nur ohne RE-x"
 - Exportsteuerung vorhanden:
   - Belegtyp Angebot/Rechnung
   - Exportziel Draft/Finalisieren
@@ -24,6 +24,15 @@ Kurzstatistik:
 - Regeloptionen im Angebots-/Rechnungsdialog vorhanden:
   - Weiterfahrt-Zuordnung (Tag 1 / Tag 2)
   - Mehrtagespauschale-Zuordnung (Tag 1 / Tag 2)
+- PDF/Link-Flow nach Export: Button "In Lexware öffnen" im Erfolgs-Dialog öffnet erstellte Belege im Browser
+  - konfigurierbar üeber `LEXWARE_WEB_URL_TEMPLATE` (z. B. `https://app.lexoffice.de/vouchers/{id}`)
+  - Fallback: resourceUri direkt wenn HTTP-URL, sonst kein Button
+- PDF-Download nach Export: Automatischer Download in konfiguriertes Verzeichnis
+  - aktivierbar per `LEXWARE_PDF_DOWNLOAD_ENABLED=true`
+  - Zielverzeichnis via `LEXWARE_PDF_DOWNLOADS_DIRECTORY` (z. B. `C:\Rechnungen`)
+  - Dateiname automatisch generiert aus Datum, Kunde und Beleg-ID
+- Spalten in der Haupt-Tabelle können durch Drag-and-Drop verschoben werden
+  - Spaltenanordnung wird in der Sitzung gespeichert und wiederhergestellt
 
 ---
 

@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib import parse, request, error
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QKeySequence, QShortcut, QAction
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -282,6 +282,7 @@ class MainWindow(QMainWindow):
 
         self.re_filter_combo = QComboBox()
         self.re_filter_combo.addItems(["Alle RE", "Nur ohne RE-x", "Nur mit RE-x"])
+        self.re_filter_combo.setCurrentIndex(1)  # Standard: "Nur ohne RE-x"
         self.re_filter_combo.setMinimumWidth(150)
 
         self.search_input = QLineEdit()
@@ -307,6 +308,7 @@ class MainWindow(QMainWindow):
         self.table_widget.horizontalHeader().setStretchLastSection(False)
         self.table_widget.horizontalHeader().setSectionsClickable(True)
         self.table_widget.horizontalHeader().setSortIndicatorShown(True)
+        self.table_widget.horizontalHeader().setMovable(True)
         self.table_widget.horizontalHeader().sectionClicked.connect(self.on_header_clicked)
         self.table_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table_widget.customContextMenuRequested.connect(self.open_context_menu)
@@ -3483,11 +3485,13 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
+        column_order = self._get_table_column_order()
         session_data = {
             "source_file": self.current_file_path,
             "active_mandant_id": self.active_mandant_id,
             "draft_settings": self._draft_export_settings(),
             "customer_article_templates": getattr(self, "customer_article_templates", {}),
+            "table_column_order": column_order,
             "groups": {},
             "change_log": self.change_log,
             "saved_at": datetime.now().isoformat(),
@@ -3539,11 +3543,15 @@ class MainWindow(QMainWindow):
         draft_settings = session_data.get("draft_settings", {})
         loaded_templates = session_data.get("customer_article_templates", {})
         saved_mandant_id = session_data.get("active_mandant_id", "")
+        table_column_order = session_data.get("table_column_order", [])
         
         if not source_file:
             return
 
         self.load_file(source_file, reset_session_state=False)
+        
+        if table_column_order:
+            self._restore_table_column_order(table_column_order)
 
         # Wechsle zum gespeicherten Mandanten, falls vorhanden
         if saved_mandant_id and saved_mandant_id != self.active_mandant_id:
@@ -3965,6 +3973,7 @@ class MainWindow(QMainWindow):
         overwritten_count = 0
         first_error = ""
         failed_previews: list[str] = []
+        successful_web_urls: list[str] = []
 
         for group in export_candidates:
             mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
@@ -4005,6 +4014,22 @@ class MainWindow(QMainWindow):
                 group["lexware_export_id"] = export_id
                 group["lexware_export_resource_uri"] = export_resource_uri
                 group["lexware_exported_at"] = datetime.now().isoformat(timespec="seconds")
+                web_url = self.lexware_export_service.build_web_url(export_resource_uri or export_id)
+                if web_url:
+                    successful_web_urls.append(web_url)
+                
+                # PDF herunterladen wenn aktiviert
+                if export_id and self.lexware_export_service.pdf_download_enabled:
+                    pdf_filename = f"{self._format_date_for_display(group.get('datum', '')).replace('.', '-')}_"\
+                                   f"{group.get('kunde_roh', '').replace('/', '_')[:30]}_"\
+                                   f"{export_id[:8]}.pdf"
+                    pdf_result = self.lexware_export_service.download_voucher_pdf(
+                        export_id,
+                        company_id=company_id,
+                        filename=pdf_filename
+                    )
+                    if pdf_result.get("success"):
+                        self._log_action(f"PDF heruntergeladen: {pdf_result.get('filepath')}")
             else:
                 fail_count += 1
                 group["lexware_export_status"] = "fehler"
@@ -4043,25 +4068,37 @@ class MainWindow(QMainWindow):
         )
 
         if fail_count == 0:
-            QMessageBox.information(
-                self,
-                "Lexware Draft Export",
+            summary_text = (
                 "Export abgeschlossen.\n"
                 f"Erfolgreich: {ok_count}\n"
                 f"Neu erstellt: {created_count}\n"
                 f"Überschrieben: {overwritten_count}\n"
                 f"Mit Warnungen (exportiert): {warning_export_count}\n"
-                f"Uebersprungen (bereits exportiert): {skipped_count}",
+                f"Uebersprungen (bereits exportiert): {skipped_count}"
             )
+            if successful_web_urls:
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Lexware Draft Export")
+                msg.setText(summary_text)
+                label = "In Lexware öffnen" if len(successful_web_urls) == 1 else f"In Lexware öffnen ({len(successful_web_urls)})"
+                open_btn = msg.addButton(label, QMessageBox.ActionRole)
+                msg.addButton(QMessageBox.Ok)
+                msg.exec()
+                if msg.clickedButton() == open_btn:
+                    for url in successful_web_urls[:10]:
+                        QDesktopServices.openUrl(QUrl(url))
+            else:
+                QMessageBox.information(self, "Lexware Draft Export", summary_text)
             return
 
         failed_text = "\n".join(failed_previews)
         if fail_count > len(failed_previews):
             failed_text += f"\n... +{fail_count - len(failed_previews)} weitere Fehler"
 
-        QMessageBox.warning(
-            self,
-            "Lexware Draft Export mit Fehlern",
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Lexware Draft Export mit Fehlern")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText(
             "Export abgeschlossen mit Fehlern.\n"
             f"Erfolgreich: {ok_count}\n"
             f"Neu erstellt: {created_count}\n"
@@ -4070,8 +4107,17 @@ class MainWindow(QMainWindow):
             f"Mit Warnungen (exportiert): {warning_export_count}\n"
             f"Uebersprungen (bereits exportiert): {skipped_count}\n\n"
             f"Erster Fehler:\n{first_error}\n\n"
-            f"Fehlerliste:\n{failed_text}",
+            f"Fehlerliste:\n{failed_text}"
         )
+        open_btn = None
+        if successful_web_urls:
+            label = "Erfolgreiche in Lexware öffnen" if len(successful_web_urls) > 1 else "In Lexware öffnen"
+            open_btn = msg.addButton(label, QMessageBox.ActionRole)
+        msg.addButton(QMessageBox.Ok)
+        msg.exec()
+        if open_btn and msg.clickedButton() == open_btn:
+            for url in successful_web_urls[:10]:
+                QDesktopServices.openUrl(QUrl(url))
 
     def _is_already_exported(self, group: dict) -> bool:
         if str(group.get("lexware_export_status", "")).strip().lower() != "exportiert":
@@ -4646,3 +4692,30 @@ class MainWindow(QMainWindow):
         self._refresh_article_editor_for_group(None)
         self._sync_travel_editor_from_group(None)
         self._update_draft_preview()
+
+    def _get_table_column_order(self) -> list[str]:
+        """Gibt die aktuelle Spaltenreihenfolge der Tabelle als Liste zurück."""
+        order = []
+        header = self.table_widget.horizontalHeader()
+        for visual_idx in range(self.table_widget.columnCount()):
+            logical_idx = header.logicalIndex(visual_idx)
+            if 0 <= logical_idx < len(self.TABLE_COLUMNS):
+                order.append(self.TABLE_COLUMNS[logical_idx])
+        return order
+
+    def _restore_table_column_order(self, column_order: list[str]) -> None:
+        """Stellt die Spaltenreihenfolge aus einer gespeicherten Liste wieder her."""
+        if not column_order or len(column_order) != len(self.TABLE_COLUMNS):
+            return
+        
+        # Baue ein Mapping von Spaltennamen zu logischen Indizes
+        name_to_logical = {name: idx for idx, name in enumerate(self.TABLE_COLUMNS)}
+        
+        # Verschiebe die Spalten in die richtige Reihenfolge
+        header = self.table_widget.horizontalHeader()
+        for visual_idx, col_name in enumerate(column_order):
+            if col_name in name_to_logical:
+                logical_idx = name_to_logical[col_name]
+                current_visual_idx = header.visualIndex(logical_idx)
+                if current_visual_idx != visual_idx:
+                    header.moveSection(current_visual_idx, visual_idx)

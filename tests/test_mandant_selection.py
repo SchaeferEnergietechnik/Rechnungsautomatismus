@@ -347,6 +347,7 @@ def test_lexware_export_uses_active_mandant_company_id(config_loader, contacts_i
             window.draft_payment_term_days_spin = Mock(value=Mock(return_value=30))
             window.lexware_export_service = Mock()
             window.lexware_export_service.is_configured = Mock(return_value=True)
+            window.lexware_export_service.build_web_url = Mock(return_value="")
             window.lexware_export_service.export_group_as_draft = Mock(return_value={
                 "success": True,
                 "response": {"id": "draft-1"},
@@ -500,6 +501,7 @@ def test_lexware_export_summary_includes_warning_count(config_loader, contacts_i
             window.lexware_export_service = Mock()
             window.lexware_export_service.is_configured = Mock(return_value=True)
             window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.build_web_url = Mock(return_value="")
             window.lexware_export_service.export_group_as_draft = Mock(return_value={
                 "success": True,
                 "response": {"id": "draft-1"},
@@ -1211,6 +1213,7 @@ def test_lexware_export_passes_voucher_type_and_export_target(config_loader, con
             window.lexware_export_service = Mock()
             window.lexware_export_service.is_configured = Mock(return_value=True)
             window.lexware_export_service.is_quotation_mode = Mock(return_value=False)
+            window.lexware_export_service.build_web_url = Mock(return_value="")
             window.lexware_export_service.export_group_as_draft = Mock(return_value={
                 "success": True,
                 "response": {"id": "draft-1"},
