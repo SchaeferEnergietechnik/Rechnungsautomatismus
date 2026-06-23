@@ -1,6 +1,6 @@
 # Entwicklungsworkflow
 
-Stand: 2026-06-14
+Stand: 2026-06-23
 
 ## Branch-Regeln
 
@@ -35,7 +35,7 @@ Stand: 2026-06-14
 Bei jeder fachlichen oder GUI-relevanten Aenderung gilt:
 - Ist-Zustand in den Markdown-Dokumenten auf denselben Stand bringen
 - neue Umgebungsvariablen in `README.md` dokumentieren
-- offene Punkte in `IMPLEMENTATION_PLAN.md` nachziehen
+- offene Punkte in `NEXT_STEPS.md.txt` und `IMPLEMENTATION_PLAN.md` nachziehen
 
 ## Tagesabschluss-Hinweis (2026-06-14)
 

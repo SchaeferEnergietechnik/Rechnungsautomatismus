@@ -1,458 +1,52 @@
 # PROJECT STATUS
-## Rechnungstool – aktueller Ist-Stand
+## Rechnungstool - aktueller Ist-Stand
 
-Stand: 2026-06-22
-Aktueller Teststand: 109/109 Tests gruen (`pytest -q`)
+Stand: 2026-06-23
+Aktueller Teststand: 112/112 Tests gruen (`pytest -q`)
+
+## Update 2026-06-23 (GUI-Feinschliff + Betriebsfluss)
+
+- Main GUI auf praxisnahe Startgroesse angepasst; Liste deutlich vergroessert
+- Untere Bearbeitungsbereiche komprimiert fuer mehr Fokus auf Gruppenliste
+- Tour-Filter erweitert (`Eintagestouren`/`Mehrtagestouren`)
+- PDF-Zielpfad sichtbar in der Toolbar; direkter Button zum Oeffnen des Ordners
+- "In Lexware oeffnen" abgesichert: Link nur bei gesetzter `LEXWARE_WEB_URL_TEMPLATE`
+- Rechnungsvorschau aus Exportpayload verfuegbar
+- Artikelkommentar/-titel editierbar und in Exportbeschreibung uebernommen
+- Kundenzuordnung im Export gehaertet: exakte Kundennummer wird bevorzugt
 
 ## Update 2026-06-22 (PDF-Flow + Tabellenreihenfolge + Windows-Fix)
 
-- PDF/Link-Flow nach Export umgesetzt:
-  - Erfolgsdialog bietet "In Lexware oeffnen"
-  - URL-Bildung ueber `LEXWARE_WEB_URL_TEMPLATE`
-- PDF-Download nach Export umgesetzt:
-  - Schaltbar per `LEXWARE_PDF_DOWNLOAD_ENABLED`
-  - Zielordner per `LEXWARE_PDF_DOWNLOADS_DIRECTORY`
-  - API-Endpoint per `LEXWARE_VOUCHER_PDF_ENDPOINT_TEMPLATE`
-- GUI verbessert:
-  - Spalten per Drag-and-Drop verschiebbar
-  - Spaltenreihenfolge wird in Sitzungen gespeichert/wiederhergestellt
-  - RE-Filter startet standardmaessig bei "Nur ohne RE-x"
-- Kompatibilitaet:
-  - PySide6-Header-API auf `setSectionsMovable` korrigiert
-  - behebt lokalen Windows-Startfehler bei `python -m app.main`
-
-## Update 2026-06-15 (Exportsteuerung + Titelfix)
-
-- Exportfluss in der GUI erweitert:
-  - Belegtyp je Exportlauf auswählbar (`Angebot`/`Rechnung`)
-  - Exportziel auswählbar (`Draft`/`Finalisieren`)
-- Lexware-Exportservice unterstützt jetzt endpoint-gesteuert:
-  - Quotations (`/v1/quotations`)
-  - Invoices (`/v1/invoices`)
-  - Finalisierung über Query `?finalize=true`
-- Tabellenfilter erweitert:
-  - RE-Filter für erledigt-Markierung `x` (mit/ohne)
-- Standardtitel korrigiert:
-  - Titel wird pro Gruppe dynamisch gebildet als `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
-  - verhindert fälschliche Übernahme des ersten Gruppentitels auf weitere Gruppen
-- Beschreibungstext enthält keine Mitarbeiternamen mehr.
-## Update 2026-06-15 (umgesetzt)
-
-- `feature/mandant-specific-data` ist in `main` gemerged.
-- GUI wurde um Validierung/Positionstransparenz erweitert:
-  - Spalte `Validierung` in der Haupttabelle
-  - Validierungsmeldungen in der Detailansicht
-  - Positionsanzahl und Positionsvorschau in der Detailansicht
-- `InvoiceProposalMapperService` nutzt `mandant_id` aus der Gruppe als Fallback.
-- CI auf `main` ist gruen; Workflow installiert Runtime-Dependencies plus `libegl1/libgl1` fuer PySide6-Imports.
-- Teststand ist jetzt 81/81 Tests gruen.
-- Der Ansatz, bestehende Lexware-Invoices/Quotations per API zu listen oder nachtraeglich zu finalisieren, wurde nach Doku-Pruefung verworfen.
-
-## Update 2026-06-15 (Exporthaertung + Rundreisen)
-
-- Sammel-Export haertet jetzt den Workflow deutlich:
-  - Blockierung bei harten Validierungsfehlern
-  - explizite Bestaetigung bei Warnungen
-  - explizite Bestaetigung bei fehlender Geokodierung
-- Export-Bestaetigung zeigt den effektiven Lexware-Konto-Kontext je Mandant:
-  - Mandant
-  - Base URL
-  - Draft-Endpoint
-  - Company-ID
-- Rundreise-Logik fuer Kundentage mit mehreren Projekten umgesetzt:
-  - automatische Segmentierung Firma -> Projekt 1 -> ... -> letztes Projekt -> Firma
-  - Segmentverteilung auf separate Rechnungen
-  - erste Rechnung = Anfahrt, letzte Rechnung = inkl. Rueckfahrt
-  - Segmentrollen in der Exportvorschau sichtbar
-  - bestehende manuelle Fahrtwerte werden nicht ueberschrieben
-
-## Update 2026-06-15 (Vorlagen + Schnellreferenz + Regeloptionen)
-
-- Wiederkehrende Rechnungsfaelle beschleunigt:
-  - kundenspezifische Artikelsatz-Vorlagen (speichern/anwenden)
-  - Persistenz in Projektdatei, Sitzungsdatei und `.status.json`
-- Schnellauswahl fuer Artikel umgesetzt:
-  - Referenz-Eingabe wie `1,4,7`
-  - robust gegen ungueltige Tokens und Duplikate
-- Wahlregeln umgesetzt:
-  - Weiterfahrt-Zuordnung als Option `tag_1` / `tag_2`
-  - Mehrtagespauschale-Zuordnung als Option `tag_1` / `tag_2`
-  - sicht- und persistierbar im Angebots-/Rechnungsdialog
-- Teststand: 88/88 Tests gruen.
+- PDF/Link-Flow nach Export umgesetzt
+- PDF-Download nach Export via ENV konfigurierbar
+- Spalten per Drag-and-Drop verschiebbar inkl. Sitzungs-Persistenz
+- RE-Filter startet standardmaessig bei "Nur ohne RE-x"
+- PySide6-Header-API auf `setSectionsMovable` korrigiert
 
 ---
 
 # 1. Projektcharakter aktuell
 
-Das Projekt ist **nicht mehr im reinen Planungszustand**.
-
-Es existiert bereits eine funktionierende Desktop-Anwendung mit GUI, Importpipeline und erster fachlicher Vorverarbeitung für Termin-/Einsatzdaten.
-
-Aktuell ist das Tool im Kern:
-
-> **ein Einsatz-/Prüf- und Freigabetool auf Basis von Terminplanung**
-
-und soll als nächster großer Schritt erweitert werden zu:
-
-> **einem mandantenfähigen Rechnungsentwurfs-Tool mit Lexware-Draft-Export**
-
-## Update 2026-06-09 (umgesetzt)
-
-- Lexware-Draft-Export für `quotations` setzt jetzt ein gültiges `expirationDate`.
-- Duplikat-Schutz im Exportfluss bleibt aktiv und wurde im GUI-Smoketest bestätigt.
-- Domain-Modelle für Rechnungsentwürfe sind im Code vorhanden (`domain/invoice_models.py`).
-- Kunden-Matching wurde integriert:
-  - `CustomerMatcherService` (Zustände: eindeutig, mehrdeutig, nicht_gefunden, nicht_zugeordnet)
-  - Integration in `InvoiceProposalMapperService`
-  - Anzeige in GUI (Spalte `Kundenmatch`, Detailbereich, CSV/JSON-Export)
-
-## Update 2026-06-14 (umgesetzt)
-
-- Mandantenkontext in der GUI ist umgesetzt:
-  - Mandantenauswahl (Dropdown)
-  - Kontakte mandantenabhängig laden
-  - Matching bei Mandantenwechsel neu berechnen
-  - aktiven Mandanten in Sitzung persistieren
-- Neue Services eingeführt:
-  - `services/invoice_position_service.py`
-  - `services/invoice_validation_service.py`
-- `InvoiceProposalMapperService` integriert jetzt Positionserstellung und Validierung.
-- Bootstrap verdrahtet Position- und Validierungsservice.
-- VS-Code-Tasks für Starten/Testen vorhanden (`.vscode/tasks.json`).
-- Teststand: 71/71 Tests grün.
-
-## Update 2026-06-14 (Fahrtkosten)
-
-- Fahrtkostenlogik im MVP ergänzt:
-  - automatische KM-Berechnung aus Mandantenadresse -> Einsatzadresse
-  - editierbare Fahrtstunden, KM, Stundensatz und KM-Satz pro Rechnung
-  - Modus je Rechnung:
-    - `extra_article` (separate Fahrtkostenposition)
-    - `included_in_first_article` (Fahrtkosten im ersten Artikel enthalten)
-- Defaults:
-  - 150 EUR/Stunde
-  - 0,70 EUR/km
-- Kundenspezifischer Modus-Default:
-  - Standard `extra_article`
-  - bei Kundenname enthält "Faber Etec" -> `included_in_first_article`
-
-## Update 2026-06-14 (Adress- und Matching-Fixes)
-
-- Exportadresse für Lexware nutzt jetzt die gematchte Kundenadresse statt der Projektadresse.
-- Kundenmatching wurde über robusten Kontakte-CSV-Import stabilisiert (Encoding-Fallback inkl. cp1252).
-- Gematchte Adressdaten (Straße/PLZ/Ort/Land) werden im Datenfluss persistiert und für den Export genutzt.
-- Fahrtkostenberechnung berücksichtigt jetzt Hin- und Rückfahrt.
-- Fahrtkostentext im Angebot zeigt nur Stunden und KM, keine EUR-Beträge im Beschreibungstext.
-
-## Nächster Schritt (gemerkt für nächste Sitzung)
-
-- Optional als naechste Ausbaustufe:
-  - separates, editierbares Feld fuer Rechnungsadresse im Dialog
-  - optionales Titel-Template mit Platzhaltern (z. B. `{typ} - {projekt}`)
-  - Angebotsuebernahme nur, wenn Lexware dafuer einen stabilen API-Weg bietet
+Das Projekt ist ein arbeitsfaehiges Desktop-Tool fuer:
+- Import und Aufbereitung von Einsatz-/Termindaten
+- manuelle Bearbeitung und Validierung von Vorschlaegen
+- Erzeugung von Angebots-/Rechnungsentwuerfen
+- Export zu Lexware inkl. PDF-Nachlauf
 
 ---
 
-# 2. Vorhandene Python-Dateien (bekannter Stand)
+# 2. Technischer Kern (vereinfacht)
 
-## `app/`
-- `main.py`
-- `bootstrap.py`
-- `config_loader.py`
-
-## `gui/`
-- `main_window.py`
-
-## `importer/`
-- `excel_termin_importer.py`
-- `contacts_csv_importer.py`
-- `articles_csv_importer.py`
-- `employee_block_extractor.py`
-
-## `services/`
-- `block_classification_service.py`
-- `customer_matcher_service.py`
-- `grouping_service.py`
-- `invoice_proposal_mapper_service.py`
-- `lexware_draft_export_service.py`
-- `proposal_builder_service.py`
+- GUI: `gui/main_window.py`
+- Import: `importer/*`
+- Fachlogik: `services/*`
+- Modelle: `domain/invoice_models.py`
+- Konfiguration: `config/*.json` + `.env`
 
 ---
 
-# 3. Aktuell vorhandene App-Struktur
+# 3. Naechster sinnvoller Fokus
 
-## `app/main.py`
-Vorhanden:
-- Anwendungsstart
-- Aufruf von `bootstrap_application()`
-- Anzeigen des Hauptfensters
-- Start des Qt-Event-Loops
-
-## `app/bootstrap.py`
-Vorhanden:
-- Erzeugung von `QApplication`
-- Verdrahtung von:
-  - `ConfigLoader`
-  - `ExcelTerminImporter`
-  - `EmployeeBlockExtractor`
-  - `BlockClassificationService`
-  - `ProposalBuilderService`
-  - `GroupingService`
-- Erzeugung von `MainWindow`
-- automatisches Laden von `data/termine.xlsx`
-
-## `app/config_loader.py`
-Vorhanden:
-- Laden von JSON-Konfigurationen aus `config/`
-
----
-
-# 4. Aktuell vorhandene Importlogik
-
-## `ExcelTerminImporter`
-Kann bereits:
-- `.csv` lesen
-- `.xlsx` lesen
-- Daten als rohe Zeilenlisten laden
-- Zellwerte normalisieren
-
-Bewertung:
-- für MVP grundsätzlich brauchbar
-- noch eher technisch als fachlich
-
-## `ContactsCsvImporter`
-Kann:
-- `contacts.csv` per `DictReader` einlesen
-
-## `ArticlesCsvImporter`
-Kann:
-- `produkte_services.csv` per `DictReader` einlesen
-
-Wichtige Anmerkung:
-- Kunden- und Artikeldaten kommen aus CSV
-- operative Rechnungs-Rohdaten kommen aus Excel
-
-## `EmployeeBlockExtractor`
-Kann:
-- Mitarbeiterblöcke aus einer Zeile per Konfiguration extrahieren
-- Blockfelder über `start_column` und `field_order` lesen
-- prüfen, ob ein Block fachlich sinnvoll befüllt ist
-
-Bewertung:
-- sehr wichtiger vorhandener Baustein
-- die 7er-Mitarbeiterblockstruktur ist bereits konfigurationsgetrieben lesbar
-
----
-
-# 5. Aktuell vorhandene fachliche Service-Logik
-
-## `BlockClassificationService`
-Bereits vorhanden:
-- Klassifikation von Blöcken als:
-  - `einsatz`
-  - `frei`
-  - `krank`
-  - `urlaub`
-  - `feiertag`
-  - `intern`
-  - `prueffall`
-  - `hinweis`
-- Rückgabe von Klassifikationsgrund
-
-Bewertung:
-- stark
-- passt bereits gut in die spätere MVP-Logik
-
-## `ProposalBuilderService`
-Bereits vorhanden:
-- nimmt extrahierte Blöcke
-- klassifiziert sie
-- verwirft nicht relevante Typen
-- übernimmt `einsatz` und `prueffall`
-- baut daraus Vorschlagskandidaten mit:
-  - Mitarbeiter
-  - KW
-  - Datum
-  - Wochentag
-  - Kunde
-  - Projekt
-  - Adresse
-  - Ansprechpartner
-  - Auftrag
-  - Bemerkungen
-  - RE
-  - Klassifikation
-  - Klassifikationsgrund
-
-Bewertung:
-- wichtiger vorhandener Kern
-- gute Grundlage für Rechnungsentwurf
-
-## `GroupingService`
-Bereits vorhanden:
-- gruppiert aktuell nach:
-  - Datum
-  - Kunde
-  - Projekt
-- sammelt:
-  - Mitarbeiterliste
-  - RE-Liste
-  - Einträge
-  - Klassifikationen
-  - Klassifikationsgründe
-- setzt Gruppenstatus:
-  - `prueffall`
-  - `einsatz`
-  - `unbekannt`
-
-Bewertung:
-- brauchbar für aktuellen Prüf-/Freigabestatus
-- für Rechnungs-MVP noch zu einfach
-- aktuelle Gruppierung ist eher **Tagesgruppierung**, nicht mehrtägige Rechnungsblocklogik
-
----
-
-# 6. Aktueller GUI-Stand
-
-## Allgemein
-`gui/main_window.py` ist bereits umfangreich und arbeitsfähig.
-
-## Vorhandene Funktionen
-- Datei öffnen
-- Projekt laden / speichern
-- Sitzung laden / speichern
-- CSV-Export
-- JSON-Export
-- Tabellenansicht mit Sortierung
-- Suche
-- Filter:
-  - Automatikstatus
-  - manueller Status
-  - geändert / ungeändert
-- Detailbereich
-- Notizfeld
-- Änderungsverlauf
-- Einzelaktionen:
-  - Freigeben
-  - Prüfen
-  - Ignorieren
-  - Offen
-- Mehrfachauswahl
-- Auswahlaktionen
-- Massenaktionen
-- Undo
-- Kontextmenü
-- Tastaturkürzel
-- Statussymbolspalte
-- Spalte „Geändert“
-- Status-/Notizpersistenz pro Quelldatei
-- Sitzungsverlauf persistierbar
-
-## Aktuelle GUI-Datenbasis
-Die GUI arbeitet bereits mit Gruppendatenfeldern wie:
-- `datum`
-- `kw`
-- `kunde_roh`
-- `projekt_roh`
-- `adresse_roh`
-- `ansprechpartner_roh`
-- `auftrag_roh`
-- `bemerkungen_roh`
-- `mitarbeiter_liste`
-- `re_roh_liste`
-- `gruppenstatus`
-- `klassifikationsgruende`
-- `eintraege`
-- `manueller_status`
-- `manuelle_notiz`
-
-Bewertung:
-- sehr gute Basis
-- GUI muss für Rechnungs-MVP eher **erweitert** als neu gebaut werden
-
----
-
-# 7. Aktuell bereits gelöste Probleme
-
-Folgende Themen sind praktisch bereits vorhanden oder grundsätzlich gelöst:
-
-- Desktop-GUI funktioniert
-- Konfigurationsloader vorhanden
-- Dateiimport aus CSV/XLSX vorhanden
-- Mitarbeiterblöcke werden extrahiert
-- Klassifikation funktioniert grundsätzlich
-- Vorschlagskandidatenbildung vorhanden
-- Gruppierung vorhanden
-- manuelle Bearbeitung und Statusworkflow vorhanden
-- Session-/Projekt-Speicherung vorhanden
-- Export zu CSV/JSON vorhanden
-
----
-
-# 8. Technische Machbarkeit Lexware
-
-Aus dem früheren Projekt-/Chatverlauf ist bekannt:
-
-- Lexware-API-Zugriff funktioniert
-- Draft-Rechnungen können erstellt werden
-- Lesen aus Lexware funktioniert
-
-Bewertung:
-- Lexware ist **nicht mehr das Hauptprojektrisiko**
-- Hauptarbeit liegt jetzt in Fachlogik + GUI-Erweiterung
-
----
-
-# 9. Hauptlücken zum Rechnungs-MVP
-
-Folgende Kernfunktionen sind im gezeigten Stand noch nicht sichtbar bzw. noch nicht umgesetzt:
-
-- Mandantenauswahl pro Vorschlag
-- Laden und Einbindung der CSV-Stammdaten in den Workflow
-- Kunden-Mapping gegen `contacts.csv`
-- Artikel-Mapping gegen `produkte_services.csv`
-- Rechnungspositionen als strukturierte Vorschlagsobjekte
-- Rechnungsadresse als editierbares Rechnungszielmodell
-- Rechnungsname / Belegtitel / Kundenreferenz
-- Zahlungsziel je Vorschlag
-- Exportvalidierung nach Rechnungslogik
-- Branding / Logos der Mandanten
-- mehrtägige Einsatzblockbildung statt Datum+Kunde+Projekt-Gruppierung
-- KW-/RE-basierte Sicht-/Vorschlagslogik gemäß MVP
-
-Bereits umgesetzt:
-- Lexware-Draft-Export aus der GUI heraus
-- Duplikat-Schutz gegen erneuten Export bereits exportierter Gruppen
-
----
-
-# 10. Wichtigste aktuelle Engstelle
-
-## `GroupingService`
-Der `GroupingService` gruppiert derzeit nach:
-- Datum
-- Kunde
-- Projekt
-
-Für das Rechnungs-MVP braucht es stattdessen voraussichtlich:
-- zusammenhängende mehrtägige Einsatzblöcke
-- konservative, aber rechnungstaugliche Gruppierung
-- Mitarbeiterzusammenführung über mehrere Tage
-
-Das ist aktuell die wichtigste fachliche Umbauzone.
-
----
-
-# 11. Zusammenfassende Bewertung
-
-## Aktueller Reifegrad
-Das Projekt ist aktuell ein:
-
-> **funktionierendes Prüf-/Freigabetool mit Einsatzgruppenanzeige**
-
-und kein reines Scaffold mehr.
-
-## Bedeutung
-Die nächsten Entwicklungsschritte sollten nicht bei null starten, sondern die vorhandene GUI und Fachpipeline gezielt in Richtung Rechnungsentwurf erweitern.
-
----
+- Exporthistorie/Nachverfolgung in der GUI sichtbarer machen
+- Optionales Titel-Template und abweichende Rechnungsadresse ergaenzen
+- Regressionstests fuer neue GUI-Interaktionen weiter ausbauen

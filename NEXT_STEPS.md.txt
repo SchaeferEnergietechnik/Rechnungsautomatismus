@@ -1,427 +1,82 @@
 # NEXT STEPS
-## Nächste Entwicklungsschritte vom aktuellen Stand zum Rechnungs-MVP
+## Naechste Entwicklungsschritte ab aktuellem Produktstand
 
-Stand: 2026-06-22
+Stand: 2026-06-23
 
 ---
 
 # 1. Ziel dieses Dokuments
 
-Dieses Dokument beschreibt die **konkreten nächsten Schritte**, um den aktuellen Stand des Tools zum definierten Rechnungs-MVP weiterzuentwickeln.
+Dieses Dokument beschreibt die **naechsten sinnvollen Ausbauschritte** ab dem bereits produktiv nutzbaren MVP-Stand.
 
 Der Fokus liegt auf:
-- möglichst wenig Doppelarbeit
-- Nutzung der bestehenden GUI und Importlogik
-- Schritt für Schritt zum Lexware-Draft-Export
+- Stabilitaet und Datenqualitaet
+- schnellerem Tagesbetrieb in der GUI
+- robusterem Export-/Nachverfolgungsfluss
 
 ---
 
-# 2. Grundstrategie
+# 2. Aktueller Stand (Kurz)
 
-Wir bauen **nicht neu**, sondern erweitern die bestehende Anwendung.
+Bereits umgesetzt und verfuegbar:
+- Lexware-Export fuer Angebot/Rechnung inkl. Draft/Finalisieren
+- Rechnungsvorschau vor Export (nahe am tatsaechlichen Payload)
+- Deterministische Kundenaufloesung im Export (Kundennummer hat Vorrang)
+- Fixe Textregeln fuer Rechnung vs. Angebot im Bearbeitungsdialog
+- Zahlungsbedingungen-UI inkl. Faelligkeitsdatum
+- Tour-Filter (`Alle`, `Eintagestouren`, `Mehrtagestouren`)
+- PDF-Download mit Zielpfad-Anzeige und Button zum Oeffnen des Ordners
+- "In Lexware oeffnen" nur noch mit expliziter `LEXWARE_WEB_URL_TEMPLATE`
+- Main-Layout auf bessere Listenflaeche und normale Startgroesse optimiert
+- Teststand aktuell: 112/112 Tests gruen (`pytest -q`)
 
-## Ausgangspunkt
-Bereits vorhanden:
-- GUI
-- Import
-- Klassifikation
-- Kandidatenbildung
-- Gruppierung
-- Statusworkflow
+## Heute abgeschlossen (2026-06-23)
 
-## Nächster Fokus
-Jetzt konsolidieren und optional ausbauen:
-- Stabilitaet und Plattform-Kompatibilitaet halten
-- UX-Feinschliff im Rechnungsdialog
-- nur klar abgegrenzte Zusatzfeatures ergaenzen
-
-## Update 2026-06-14
-
-Bereits umgesetzt:
-- Lexware-Export robust gegen fehlendes `expirationDate` bei `quotations`.
-- Domain-Modell für Rechnungsentwürfe aktiv im Code.
-- Kunden-Matching (exakt) implementiert und in GUI-Datenfluss sichtbar gemacht.
-- Mandantenkontext in der GUI umgesetzt.
-- Rechnungspositionen und Validierungsservice eingeführt und im Mapper integriert.
-- Fahrtkostenlogik im MVP ergänzt:
-  - KM-Berechnung aus Mandantenadresse -> Einsatzadresse
-  - editierbare Fahrtstunden/KM/Sätze pro Rechnung
-  - Modus je Rechnung (`extra_article` / `included_in_first_article`)
-- Kundenadresse im Export aus gematchten Kontaktdaten statt Projektadresse.
-- Kontakte-CSV-Import für Matching robuster gemacht (utf-8-sig/cp1252/latin-1).
-- Fahrtkosten auf Hin- und Rückfahrt umgestellt.
-- Fahrtkostentext im Angebot ohne EUR-Beträge (nur Stunden und KM).
-- Teststand aktuell: 71/71.
-
-## Update 2026-06-15
-
-Bereits umgesetzt:
-- Feature-Stand ist in `main` gemerged.
-- CI ist wieder gruen (Dependencies + Systemlibs fuer PySide6 im Workflow).
-- GUI zeigt jetzt Validierung und Positionsvorschau direkt in Tabelle/Detailbereich.
-- Mapper-Fallback fuer `mandant_id` aus Gruppendaten aktiv.
-- Der verworfene Lexware-Ansatz ist dokumentiert: kein weiterer Arbeitsblock fuer Listing/Finalisierung bestehender Invoices/Quotations ohne bekannte ID.
-- Export blockiert jetzt bei harten Validierungsfehlern.
-- Sammel-Export fordert jetzt explizite Bestaetigung bei Warnungen und bei fehlender Geokodierung.
-- Export-Bestaetigung zeigt Lexware-Konto-Kontext je Mandant (Mandant/Base URL/Endpoint/Company-ID).
-- Rundreisen bei mehreren Projekten am selben Kundentag werden automatisch segmentiert und verteilt (erste Rechnung Anfahrt, letzte Rechnung inkl. Rueckfahrt).
-- Exportvorschau zeigt Segmenttext je Gruppe (Route, km, h) inkl. Rollenhinweis.
-- Teststand aktuell: 81/81.
-
-## Update 2026-06-15 (spaet)
-
-Bereits umgesetzt:
-- Kundenspezifische Artikelsatz-Vorlagen (speichern/anwenden) inkl. Persistenz.
-- Schnellreferenz-Eingabe fuer Artikelauswahl (z. B. `1,4,7`) inkl. Validierung.
-- Wahlregeln fuer Weiterfahrt-Zuordnung (Tag 1/Tag 2) umgesetzt.
-- Wahlregeln fuer Mehrtagespauschale-Zuordnung (Tag 1/Tag 2) umgesetzt.
-- Teststand aktuell: 88/88.
-
-## Update 2026-06-15 (Tagesabschluss)
-
-Bereits umgesetzt:
-- RE-Filter in der GUI ergänzt (`Alle RE`, `Nur ohne RE-x`, `Nur mit RE-x`).
-- Exportmodus erweitert:
-  - Belegtyp pro Lauf (`Angebot`/`Rechnung`)
-  - Exportziel pro Lauf (`Draft`/`Finalisieren`)
-- Titelbildung im Export stabilisiert:
-  - Standardtitel ist immer `Angebot - <Projekt>` bzw. `Rechnung - <Projekt>`
-  - Auto-Titelvorlagen werden je Gruppe neu berechnet (kein Carry-over mehr).
-- Teststand aktuell: 103/103.
-
-Als nächstes umsetzen:
-- Optional: separates editierbares Feld fuer Rechnungsadresse im Angebots-/Rechnungsdialog.
-- Optional: explizites Titel-Template-Feld mit Platzhaltern (z. B. `{typ} - {projekt}`) anbieten.
-- Optional: Angebotsuebernahme nur bei verifiziertem API-Weg und klarer Fehlerstrategie.
-
-## Update 2026-06-22
-
-Bereits umgesetzt:
-- PDF/Link-Flow nach Export (Button "In Lexware oeffnen").
-- PDF-Download nach Export in konfiguriertes Verzeichnis.
-- Spaltenreihenfolge per Drag-and-Drop inkl. Sitzungs-Persistenz.
-- RE-Filter-Default auf "Nur ohne RE-x" gesetzt.
-- PySide6-Kompatibilitaetsfix fuer Tabellen-Header (`setSectionsMovable`).
-- Teststand aktuell: 109/109.
+- Hauptfenster startet in normaler Arbeitsgroesse statt bildschirmfuellender Startgroesse
+- Tabellenbereich weiter vergroessert, unterer Editorbereich sichtbar verkleinert
+- Untere Bearbeitungsbereiche (Notiz/Log/Vorschau) platzsparender gemacht
 
 ---
 
-# 3. Priorität 1 – Ist-Stand technisch stabilisieren
+# 3. Prioritaet A - Exportnachverfolgung und Transparenz
 
-## 3.1 Ziel
-Sichere Grundlage schaffen, bevor Rechnungslogik eingebaut wird.
+## Ziel
+Nach Export soll im Tagesbetrieb schneller erkennbar sein, was erfolgreich war und wo Nacharbeit noetig ist.
 
 ## Aufgaben
-- prüfen, welche weiteren `.py`-Dateien tatsächlich existieren
-- Projektstruktur dokumentieren
-- Konfigurationsdateien (`config/*.json`) prüfen und vervollständigen
-- einen sauberen aktuellen Startzustand herstellen
+- Exporthistorie je Gruppe in der GUI strukturierter sichtbar machen (Zeit, Zielsystem-ID, Ergebnis)
+- Fehler-/Warnungsgruende pro Exportlauf persistent ablegen und filterbar machen
+- Optional: einfacher "erneut exportieren"-Pfad mit klaren Sicherheitsregeln
 
 ## Ergebnis
-Klarer, lauffähiger Ausgangspunkt ohne Unklarheiten.
+Weniger Rueckfragen, schnelleres Nachfassen bei Fehlerfaellen.
 
 ---
 
-# 4. Priorität 2 – Rechnungsentwurfs-Datenmodell einführen
+# 4. Prioritaet B - Datenpflege im Dialog weiter vereinfachen
 
 ## Ziel
-Neben den bisherigen Gruppen braucht es ein explizites Modell für Rechnungsentwürfe.
-
-## Neue Kernobjekte
-- `InvoiceProposal`
-- `InvoicePosition`
-- `CustomerMatchResult`
-- optional `MandantConfig` als stark genutztes Runtime-Objekt
+Weniger Klicks pro Rechnung bei haeufig wiederkehrenden Faellen.
 
 ## Aufgaben
-- bestehende Gruppendictionaries in strukturierte Rechnungsobjekte überführen
-- Felder ergänzen:
-  - `zielmandant_id`
-  - `kunde_zugeordnet_name`
-  - `kundennummer`
-  - `rechnungsname_lang`
-  - `belegtitel_lexware`
-  - `kundenreferenz`
-  - `zahlungsziel_text`
-  - `positionen`
-  - `validierung`
-  - `exportstatus`
+- Optionales Titel-Template-Feld mit Platzhaltern (z. B. `{typ}`, `{projekt}`, `{datum}`)
+- Optionales separates Feld fuer Rechnungsadresse (abweichend zur Standardadresse)
+- Schnellere Massenanpassungen fuer Artikeltexte im aktuellen Filterkontext pruefen
 
 ## Ergebnis
-Das Tool arbeitet nicht mehr nur mit Einsatzgruppen, sondern mit echten Rechnungsentwurf-Objekten.
+Hoehere Bearbeitungsgeschwindigkeit ohne Verlust an Kontrolle.
 
 ---
 
-# 5. Priorität 3 – Gruppierung für Rechnungsblöcke umbauen
+# 5. Prioritaet C - Betriebsstabilitaet
 
 ## Ziel
-Der aktuelle `GroupingService` gruppiert nur nach Datum+Kunde+Projekt und ist damit für Rechnungslogik zu flach.
+Robustes Verhalten ueber verschiedene Umgebungen und Datensaetze hinweg.
 
 ## Aufgaben
-- neue konservative Einsatzblocklogik implementieren
-- gleiche Kunde/Projekt-Einsätze über zusammenhängende Tage zusammenführen
-- mehrere Mitarbeiter innerhalb desselben Einsatzblocks zulassen
-- `prueffall` sichtbar halten
-- eher zu wenig zusammenfassen als zu viel
+- Weitere GUI-Regressionstests fuer groessere Refactorings im Hauptfenster
+- Logging bei Lexware-Fehlern konsolidieren (verstaendlich, aber ohne Secrets)
+- Dokumentation der Pflicht-ENVs je Mandant in einer kompakten Checkliste
 
 ## Ergebnis
-Rechnungsrelevante Einsatzblöcke statt bloßer Tagesgruppen.
-
----
-
-# 6. Priorität 4 – Mandantenkontext einbauen
-
-## Ziel
-Jeder Vorschlag braucht einen abrechnenden Mandanten.
-
-## Aufgaben
-- Mandanten aus `mandants.json` laden
-- Mandantenauswahl in der GUI ergänzen
-- Anzeige von:
-  - Firmenname
-  - Adresse
-  - Logo
-- mandantenbezogene CSV-Pfade aktiv nutzen
-
-## Ergebnis
-Das Tool wird mandantenfähig.
-
----
-
-# 7. Priorität 5 – Kundenstammdaten integrieren
-
-## Ziel
-Rechnungsempfänger sauber gegen `contacts.csv` mappen.
-
-## Aufgaben
-- `ContactsCsvImporter` in Bootstrap einbinden
-- Kundenstämme pro Mandant laden
-- exakten Match gegen `Firmenname` implementieren
-- Zustände unterstützen:
-  - eindeutig
-  - mehrdeutig
-  - nicht gefunden
-  - manuell zugeordnet
-
-## Ergebnis
-Jeder exportierbare Vorschlag hat einen validen Kundenbezug.
-
----
-
-# 8. Priorität 6 – Artikelstammdaten integrieren
-
-## Ziel
-Artikel aus `produkte_services.csv` im Rechnungsworkflow verfügbar machen.
-
-## Aufgaben
-- `ArticlesCsvImporter` in Bootstrap einbinden
-- mandantenbezogene Artikellisten laden
-- GUI-Artikelwahl ergänzen
-- pro Position übernehmen:
-  - Bezeichnung
-  - Einheit
-  - Preis netto
-  - Steuerart / Steuersatz
-
-## Ergebnis
-Rechnungspositionen können mandantenbezogen gepflegt werden.
-
----
-
-# 9. Priorität 7 – GUI zum Rechnungseditor erweitern
-
-## Ziel
-Die bestehende GUI wird von einem Prüf-/Freigabetool zu einem Rechnungseditor erweitert.
-
-## In die GUI ergänzen
-- Mandantenauswahl
-- Kundenzuordnung
-- Rechnungsname lang
-- Belegtitel Lexware
-- Kundenreferenz
-- Rechnungsadresse
-- Zahlungsziel
-- strukturierter Positionseditor
-- Export-/Validierungsbereich
-
-## Wichtige Regel
-Bestehende Funktionen wie:
-- Suche
-- Status
-- Verlauf
-- Speichern/Laden
-- Filter
-sollen möglichst erhalten und weitergenutzt werden.
-
-## Ergebnis
-Die GUI bleibt vertraut, bekommt aber Rechnungsfunktionalität.
-
----
-
-# 10. Priorität 8 – Validierungslogik für Rechnungsdaten
-
-## Ziel
-Nur vollständige und plausible Vorschläge dürfen exportiert werden.
-
-## Aufgaben
-Validierungen ergänzen für:
-- Mandant
-- Kundenzuordnung
-- Kundennummer
-- Rechnungsadresse
-- Belegtitel <= 25 Zeichen
-- mindestens eine Position
-- Preisangaben
-- Zahlungsziel
-
-## Ergebnis
-Klarer Exportstatus:
-- fehlerhaft
-- warnungen
-- exportbereit
-
----
-
-# 11. Priorität 9 – Lexware Draft Export
-
-## Ziel
-Aus der GUI heraus einen Rechnungsentwurf nach Lexware anlegen.
-
-## Aufgaben
-- Lexware-Client integrieren / anbinden
-- Draft-Export-Service ergänzen
-- Exportbutton in GUI einbauen
-- Rückgabe speichern:
-  - Lexware-ID
-  - Resource-URI
-  - Exportzeitpunkt
-  - Fehlerstatus
-- Mehrfachexport absichern
-
-## Ergebnis
-Erster produktiver End-to-End-Flow.
-
----
-
-# 12. Priorität 10 – Backup-Logik vorbereiten
-
-## Ziel
-Spätere Excel-Schreibzugriffe absichern.
-
-## Im aktuellen Rechnungs-MVP
-- Backup-Service ist bereits sinnvoll vorzubereiten
-- aktive Excel-Schreiblogik ist noch nicht Teil des MVP
-
-## Aufgaben
-- `BackupService` vorhanden halten / integrieren
-- Dateinamenschema stabilisieren
-- später an RE-Schreiblogik ankoppeln
-
-## Ergebnis
-Sicherheitsmechanismus ist vorbereitet.
-
----
-
-# 13. Excel-Anpassungen – noch nicht jetzt, aber gebündelt
-
-Vor dem eigentlichen Umbau der Excel soll eine **einmalige Sammelliste** erstellt werden.
-
-## Noch nicht jetzt einzeln umsetzen
-Sondern erst gesammelt prüfen:
-- RE/ Re vereinheitlichen
-- blockbezogene Felder konsistenter benennen
-- optionale Nummerierung aller Blockfelder
-- sonstige Format-/Benennungsvereinheitlichungen
-
-## Ziel
-Nur eine Anpassungsrunde an der Excel.
-
----
-
-# 14. Konkrete Reihenfolge der nächsten Coding-Schritte
-
-## Schritt 1
-Fehlende Services/Dateien sichten und Gesamtstand vervollständigen
-
-## Schritt 2
-Konfigurationsdateien finalisieren:
-- `mandants.json`
-- `excel_import.json`
-- `validation.json`
-- `defaults.json`
-
-## Schritt 3
-Bootstrap erweitern:
-- ContactsCsvImporter integrieren
-- ArticlesCsvImporter integrieren
-
-## Schritt 4
-Neues Rechnungsentwurfsmodell einführen
-
-## Schritt 5
-GroupingService für mehrtägige Einsatzblöcke umbauen
-
-## Schritt 6
-GUI um Mandant/Kunde/Positionen/Zahlungsziel/Belegtitel erweitern
-
-## Schritt 7
-ValidationService ergänzen
-
-## Schritt 8
-Lexware-Draft-Export anbinden
-
----
-
-# 15. Definition des nächsten besten echten Entwicklungsblocks
-
-## Empfohlener nächster Arbeitsblock
-**„Rechnungsentwurfs-Kernmodell + Gruppierungsumbau“**
-
-### Warum?
-Weil aktuell:
-- GUI schon stark ist
-- Import schon da ist
-- aber die Gruppierung und das Datenmodell noch nicht rechnungstauglich genug sind
-
-### Konkret:
-1. Gruppierung auf mehrtägige Einsatzblöcke umbauen  
-2. daraus `InvoiceProposal`-artige Objekte erzeugen  
-3. erst danach GUI-Felder erweitern
-
----
-
-# 16. Was aktuell bewusst noch warten darf
-
-Noch nicht als nächster Schritt:
-- PDF-Download
-- Final-Export
-- Vorlagen/Favoriten
-- Angebotsübernahme
-- komplexe Fahrtblocklogik
-- Excel/Lexware-Abweichungsprüfung
-
-Diese Dinge sind wichtig, aber nicht notwendig für den ersten produktiven Rechnungs-MVP.
-
----
-
-# 17. Zusammenfassung
-
-## Wir haben bereits:
-- GUI
-- Import
-- Klassifikation
-- Kandidatenbildung
-- einfache Gruppierung
-
-## Wir brauchen als Nächstes:
-- rechnungstaugliches Datenmodell
-- mehrtägige Einsatzblocklogik
-- Mandanten-/Kunden-/Artikelintegration
-- Rechnungseditor in der GUI
-- Validierung
-- Lexware Draft Export
-
-## Wichtigster nächster Schritt:
-> **Rechnungsentwurfs-Kernmodell + Umbau der Gruppierungslogik**
-
----
+Stabiler Betrieb mit klaren Fehlermeldungen und schnellerer Inbetriebnahme.

@@ -77,10 +77,9 @@ class MainWindow(QMainWindow):
         screen = QApplication.primaryScreen()
         if screen is not None:
             available = screen.availableGeometry()
-            self.setMaximumSize(available.size())
-            self.resize(min(1920, available.width()), min(1080, available.height()))
+            self.resize(min(1360, available.width()), min(860, available.height()))
         else:
-            self.resize(1600, 900)
+            self.resize(1280, 820)
 
         self.config_loader = config_loader
         self.importer = importer
@@ -158,7 +157,7 @@ class MainWindow(QMainWindow):
         self.article_quick_select_input.returnPressed.connect(self.apply_quick_article_reference_for_group)
 
         self.article_list_widget = QListWidget()
-        self.article_list_widget.setMinimumHeight(100)
+        self.article_list_widget.setMinimumHeight(72)
         self.article_list_widget.itemSelectionChanged.connect(self._on_article_list_selection_changed)
 
         self.article_summary_label = QLabel("Artikel: kein Artikel gewählt")
@@ -181,7 +180,7 @@ class MainWindow(QMainWindow):
 
         self.article_comment_edit = QPlainTextEdit()
         self.article_comment_edit.setPlaceholderText("Zusatzkommentar zum Artikel (wird in den Beleg übernommen)")
-        self.article_comment_edit.setMinimumHeight(70)
+        self.article_comment_edit.setMinimumHeight(54)
         self.article_comment_edit.installEventFilter(self)
 
         self.article_text_save_button = QPushButton("Artikeltext speichern")
@@ -195,13 +194,13 @@ class MainWindow(QMainWindow):
         self.draft_introduction_edit = QPlainTextEdit()
         self.draft_introduction_edit.setPlaceholderText("Einleitungstext für das Angebot ...")
         self.draft_introduction_edit.setPlainText("Automatisch erzeugter Entwurf für das Angebot.")
-        self.draft_introduction_edit.setMinimumHeight(70)
+        self.draft_introduction_edit.setMinimumHeight(50)
         self.draft_introduction_edit.textChanged.connect(self._update_draft_preview)
 
         self.draft_remark_edit = QPlainTextEdit()
         self.draft_remark_edit.setPlaceholderText("Nachbemerkung / Fußtext ...")
         self.draft_remark_edit.setPlainText("Erzeugt durch Rechnungsautomatismus")
-        self.draft_remark_edit.setMinimumHeight(60)
+        self.draft_remark_edit.setMinimumHeight(46)
         self.draft_remark_edit.textChanged.connect(self._update_draft_preview)
 
         self.draft_payment_term_days_spin = QSpinBox()
@@ -262,7 +261,7 @@ class MainWindow(QMainWindow):
         self.draft_preview_view = QPlainTextEdit()
         self.draft_preview_view.setReadOnly(True)
         self.draft_preview_view.setPlaceholderText("Vorschau des Lexware-Drafts ...")
-        self.draft_preview_view.setMinimumHeight(150)
+        self.draft_preview_view.setMinimumHeight(90)
         self.draft_preview_view.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.draft_preview_view.setStyleSheet(
             "QPlainTextEdit {"
@@ -384,12 +383,12 @@ class MainWindow(QMainWindow):
 
         self.note_edit = QPlainTextEdit()
         self.note_edit.setPlaceholderText("Manuelle Notiz zur ausgewählten Gruppe ...")
-        self.note_edit.setMinimumHeight(100)
+        self.note_edit.setMinimumHeight(72)
 
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setPlaceholderText("Änderungsverlauf der aktuellen Sitzung ...")
-        self.log_view.setMinimumHeight(120)
+        self.log_view.setMinimumHeight(80)
 
         top_bar = QHBoxLayout()
         top_bar.addWidget(self.open_button)
@@ -523,7 +522,7 @@ class MainWindow(QMainWindow):
         left_layout.addLayout(selection_action_bar)
         left_layout.addLayout(bulk_action_bar)
         left_layout.addLayout(summary_bar)
-        left_layout.addWidget(self.table_widget, 8)
+        left_layout.addWidget(self.table_widget, 12)
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
@@ -555,6 +554,7 @@ class MainWindow(QMainWindow):
         lower_editor_splitter.setStretchFactor(0, 1)
         lower_editor_splitter.setStretchFactor(1, 1)
         lower_editor_splitter.setSizes([620, 620])
+        lower_editor_splitter.setMaximumHeight(280)
 
         left_layout.addWidget(lower_editor_splitter, 1)
 

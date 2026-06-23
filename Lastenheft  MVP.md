@@ -5,7 +5,7 @@ Stand: 2026-06-23
 Status: MVP-Fassung mit umgesetzten Erweiterungen
 
 Arbeitsstand 2026-06-23:
-- Teststand: 109/109 Tests gruen.
+- Teststand: 112/112 Tests gruen.
 - Feature-Stand ist in `main` enthalten.
 - CI auf `main` ist gruen.
 - Rueckwaertige Bearbeitung bestehender Lexware-Invoices/Quotations per allgemeinem Listen-/Finalisierungsdialog ist laut offizieller API-Doku nicht Teil des MVP.
@@ -16,6 +16,12 @@ Arbeitsstand 2026-06-23:
 - PDF-Download nach Export ist umgesetzt.
 - Spaltenverschiebung in der Haupttabelle inkl. Sitzungs-Persistenz ist umgesetzt.
 - RE-Filter startet standardmaessig mit "Nur ohne RE-x".
+- Tour-Filter fuer Eintages-/Mehrtagestouren ist umgesetzt.
+- Rechnungsvorschau vor Export ist umgesetzt.
+- Zahlungsbedingungen-Auswahl inkl. Faelligkeitsanzeige ist umgesetzt.
+- Artikelkommentar/-titel sind im GUI-Flow editierbar und exportwirksam.
+- "In Lexware oeffnen" wird nur noch mit `LEXWARE_WEB_URL_TEMPLATE` angeboten.
+- PDF-Zielordner ist in der GUI sichtbar und direkt oeffenbar.
 
 ---
 
@@ -554,7 +560,7 @@ Nicht MVP, aber geplant:
 
 ---
 
-# 30. Umgesetzter Zusatzstand (2026-06-22)
+# 30. Umgesetzter Zusatzstand (2026-06-23)
 
 Bereits umgesetzt und im laufenden Stand aktiv:
 - Mandantenabhaengige Kontakte und Artikel
@@ -568,6 +574,10 @@ Bereits umgesetzt und im laufenden Stand aktiv:
 - PDF-Download nach Export in konfigurierbares Zielverzeichnis
 - Spaltenverschiebung (Drag-and-Drop) in der Haupttabelle inkl. Sitzungs-Persistenz
 - RE-Filter-Standard auf "Nur ohne RE-x"
+- Tour-Filter (`Eintagestouren`/`Mehrtagestouren`)
+- Rechnungsvorschau aus dem Exportpayload
+- Kundennummernprioritaet bei Lexware-Kundenaufloesung
+- Artikelkommentar/-titel editierbar und im Exporttext beruecksichtigt
 
 ---
 
