@@ -1,4 +1,5 @@
 from services.lexware_draft_export_service import LexwareDraftExportService
+from services.invoice_position_service import InvoicePositionService
 
 
 def _sample_group() -> dict:
@@ -28,6 +29,16 @@ def test_payload_contains_required_payment_fields(monkeypatch):
     assert payload["paymentConditions"]["paymentTermLabel"] == "21 Tage netto"
 
 
+def test_payload_voucher_date_uses_current_date_not_service_date():
+    service = LexwareDraftExportService()
+
+    payload = service._build_payload(_sample_group())
+
+    voucher_date_text = str(payload.get("voucherDate", ""))
+    assert "2026-04-07" not in voucher_date_text
+    assert "T" in voucher_date_text
+
+
 def test_payload_uses_overrides(monkeypatch):
     monkeypatch.setenv("LEXWARE_DRAFT_ENDPOINT", "/v1/quotations")
     service = LexwareDraftExportService()
@@ -47,6 +58,45 @@ def test_payload_uses_overrides(monkeypatch):
     assert payload["paymentConditions"]["paymentTermDuration"] == 30
     assert payload["paymentConditions"]["paymentTermLabel"] == "30 Tage netto"
     assert "expirationDate" in payload
+
+
+def test_payload_prefers_exact_customer_number_for_address_resolution(monkeypatch):
+    service = LexwareDraftExportService()
+    service.is_configured = lambda: True
+    service.fetch_customers = lambda query="", company_id="": {
+        "success": True,
+        "customers": [
+            {
+                "id": "c-10001",
+                "customer_number": "10001",
+                "name": "FABER E-Tec GmbH",
+                "street": "Altstrasse 1",
+                "zip": "11111",
+                "city": "Altstadt",
+                "country_code": "DE",
+            },
+            {
+                "id": "c-10006",
+                "customer_number": "10006",
+                "name": "FABER E-Tec GmbH",
+                "street": "Bachstr. 21",
+                "zip": "32257",
+                "city": "Bünde",
+                "country_code": "DE",
+            },
+        ],
+    }
+
+    group = _sample_group()
+    group["customer_match_name"] = "FABER E-Tec GmbH"
+    group["customer_match_number"] = "10006"
+
+    payload = service._build_payload(group, company_id="company-power")
+
+    assert payload["address"]["name"] == "FABER E-Tec GmbH"
+    assert payload["address"]["street"] == "Bachstr. 21"
+    assert payload["address"]["zip"] == "32257"
+    assert payload["address"]["city"] == "Bünde"
 
 
 def test_payload_line_items_shape(monkeypatch):
@@ -226,6 +276,26 @@ def test_payload_includes_travel_text_in_extra_article_description():
     assert payload["lineItems"][1]["description"].count("Fahrtkostenangaben") == 1
     assert "10 km" in payload["lineItems"][1]["description"]
     assert "EUR" not in payload["lineItems"][1]["description"]
+
+
+def test_travel_detail_route_uses_places_without_street_text():
+    service = InvoicePositionService()
+    group = {
+        "travel_hours": 1.0,
+        "travel_km": 20.0,
+        "travel_hour_rate": 150.0,
+        "travel_km_rate": 0.7,
+        "travel_route_segments": [
+            "Ferchlipp 16, 39615 Altmärkische Wische -> Bachstr. 21, 32257 Bünde",
+        ],
+    }
+
+    text = service.travel_detail_text(group)
+
+    assert "Route:" in text
+    assert "Altmärkische Wische -> Bünde" in text
+    assert "Ferchlipp" not in text
+    assert "Bachstr" not in text
 
 
 def test_payload_includes_travel_text_in_first_article_description_when_included():
@@ -619,13 +689,13 @@ def test_build_web_url_with_template(monkeypatch):
     assert url == "https://app.lexoffice.de/vouchers/uuid-456"
 
 
-def test_build_web_url_fallback_to_resource_uri(monkeypatch):
+def test_build_web_url_without_template_returns_empty(monkeypatch):
     monkeypatch.delenv("LEXWARE_WEB_URL_TEMPLATE", raising=False)
     service = LexwareDraftExportService()
 
-    # resourceUri ist direkt nutzbar wenn HTTP-URL
+    # Ohne WEB-Template wird keine URL ausgegeben (verhindert Browser-Zugriffsfehler auf API-URIs).
     url = service.build_web_url("https://api.lexware.io/v1/quotations/abc-123")
-    assert url == "https://api.lexware.io/v1/quotations/abc-123"
+    assert url == ""
 
     # bare ID ohne URL-Präfix → kein Fallback
     url = service.build_web_url("uuid-456")

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib import parse, request, error
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QEvent, QLocale, Qt, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut, QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -74,7 +74,13 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.setWindowTitle("Rechnungsvorschlag Tool")
-        self.resize(2080, 1200)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            self.setMaximumSize(available.size())
+            self.resize(min(1920, available.width()), min(1080, available.height()))
+        else:
+            self.resize(1600, 900)
 
         self.config_loader = config_loader
         self.importer = importer
@@ -112,8 +118,12 @@ class MainWindow(QMainWindow):
         self.save_session_button = QPushButton("Sitzung speichern")
         self.export_csv_button = QPushButton("CSV exportieren")
         self.export_json_button = QPushButton("JSON exportieren")
+        self.lexware_preview_button = QPushButton("Rechnungsvorschau")
         self.lexware_export_button = QPushButton("Lexware exportieren")
         self.offer_editor_button = QPushButton("Angebot/Rechnung bearbeiten")
+        self.open_pdf_folder_button = QPushButton("PDF-Ordner öffnen")
+        self.pdf_folder_label = QLabel("PDF-Ziel: nicht konfiguriert")
+        self.pdf_folder_label.setStyleSheet("color: #5f6368;")
         
         self.mandant_combo = QComboBox()
         self.mandant_combo.setMinimumWidth(250)
@@ -148,7 +158,7 @@ class MainWindow(QMainWindow):
         self.article_quick_select_input.returnPressed.connect(self.apply_quick_article_reference_for_group)
 
         self.article_list_widget = QListWidget()
-        self.article_list_widget.setMinimumHeight(140)
+        self.article_list_widget.setMinimumHeight(100)
         self.article_list_widget.itemSelectionChanged.connect(self._on_article_list_selection_changed)
 
         self.article_summary_label = QLabel("Artikel: kein Artikel gewählt")
@@ -159,7 +169,23 @@ class MainWindow(QMainWindow):
         self.article_price_spin.setDecimals(2)
         self.article_price_spin.setSingleStep(10.0)
         self.article_price_spin.setPrefix("EUR ")
+        self.article_price_spin.setLocale(QLocale(QLocale.German, QLocale.Germany))
+        # Erst nach Enter/Fokuswechsel übernehmen, damit freie Zahleneingabe
+        # nicht durch sofortige GUI-Refreshes unterbrochen wird.
+        self.article_price_spin.setKeyboardTracking(False)
         self.article_price_spin.valueChanged.connect(self._on_article_price_changed)
+
+        self.article_title_edit = QLineEdit()
+        self.article_title_edit.setPlaceholderText("Artikelbezeichnung für Rechnung/Angebot")
+        self.article_title_edit.editingFinished.connect(self._auto_save_article_text_if_needed)
+
+        self.article_comment_edit = QPlainTextEdit()
+        self.article_comment_edit.setPlaceholderText("Zusatzkommentar zum Artikel (wird in den Beleg übernommen)")
+        self.article_comment_edit.setMinimumHeight(70)
+        self.article_comment_edit.installEventFilter(self)
+
+        self.article_text_save_button = QPushButton("Artikeltext speichern")
+        self.article_text_save_button.clicked.connect(self.save_article_text_for_group)
 
         self.draft_title_edit = QLineEdit()
         self.draft_title_edit.setPlaceholderText("Belegtitel für Lexware-Draft")
@@ -285,6 +311,10 @@ class MainWindow(QMainWindow):
         self.re_filter_combo.setCurrentIndex(1)  # Standard: "Nur ohne RE-x"
         self.re_filter_combo.setMinimumWidth(150)
 
+        self.tour_filter_combo = QComboBox()
+        self.tour_filter_combo.addItems(["Alle Touren", "Nur Eintages", "Nur Mehrtages"])
+        self.tour_filter_combo.setMinimumWidth(150)
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Suche nach Kunde, Projekt, Mitarbeiter, Adresse, Auftrag, Bemerkung ...")
         self.search_input.setMinimumWidth(320)
@@ -354,12 +384,12 @@ class MainWindow(QMainWindow):
 
         self.note_edit = QPlainTextEdit()
         self.note_edit.setPlaceholderText("Manuelle Notiz zur ausgewählten Gruppe ...")
-        self.note_edit.setMinimumHeight(160)
+        self.note_edit.setMinimumHeight(100)
 
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setPlaceholderText("Änderungsverlauf der aktuellen Sitzung ...")
-        self.log_view.setMinimumHeight(180)
+        self.log_view.setMinimumHeight(120)
 
         top_bar = QHBoxLayout()
         top_bar.addWidget(self.open_button)
@@ -370,6 +400,7 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.export_csv_button)
         top_bar.addWidget(self.export_json_button)
         top_bar.addWidget(self.offer_editor_button)
+        top_bar.addWidget(self.lexware_preview_button)
         top_bar.addWidget(self.lexware_export_button)
         top_bar.addWidget(QLabel("Belegtyp:"))
         top_bar.addWidget(self.voucher_type_combo)
@@ -377,6 +408,8 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.export_target_combo)
         top_bar.addWidget(QLabel("Mandant:"))
         top_bar.addWidget(self.mandant_combo)
+        top_bar.addWidget(self.open_pdf_folder_button)
+        top_bar.addWidget(self.pdf_folder_label)
         top_bar.addStretch()
 
         filter_bar = QHBoxLayout()
@@ -384,6 +417,7 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(self.manual_filter_combo)
         filter_bar.addWidget(self.changed_filter_combo)
         filter_bar.addWidget(self.re_filter_combo)
+        filter_bar.addWidget(self.tour_filter_combo)
         filter_bar.addWidget(self.show_open_only_button)
         filter_bar.addWidget(self.show_all_manual_button)
         filter_bar.addWidget(self.search_input, 1)
@@ -464,6 +498,11 @@ class MainWindow(QMainWindow):
         article_price_row.addWidget(QLabel("Preis (ausgewählter Artikel)"))
         article_price_row.addWidget(self.article_price_spin)
         article_bar.addLayout(article_price_row)
+        article_bar.addWidget(QLabel("Artikelbezeichnung"))
+        article_bar.addWidget(self.article_title_edit)
+        article_bar.addWidget(QLabel("Zusatzkommentar"))
+        article_bar.addWidget(self.article_comment_edit)
+        article_bar.addWidget(self.article_text_save_button)
         article_bar.addWidget(QLabel("Manuelle Notiz"))
         article_bar.addWidget(self.note_edit)
         article_bar.addWidget(self.save_note_button)
@@ -484,7 +523,7 @@ class MainWindow(QMainWindow):
         left_layout.addLayout(selection_action_bar)
         left_layout.addLayout(bulk_action_bar)
         left_layout.addLayout(summary_bar)
-        left_layout.addWidget(self.table_widget, 4)
+        left_layout.addWidget(self.table_widget, 8)
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
@@ -517,7 +556,7 @@ class MainWindow(QMainWindow):
         lower_editor_splitter.setStretchFactor(1, 1)
         lower_editor_splitter.setSizes([620, 620])
 
-        left_layout.addWidget(lower_editor_splitter, 2)
+        left_layout.addWidget(lower_editor_splitter, 1)
 
         right_widget.setStyleSheet(
             "QFrame#rightSection {"
@@ -550,8 +589,10 @@ class MainWindow(QMainWindow):
         self.save_session_button.clicked.connect(self.save_session_file)
         self.export_csv_button.clicked.connect(self.export_visible_groups_to_csv)
         self.export_json_button.clicked.connect(self.export_visible_groups_to_json)
+        self.lexware_preview_button.clicked.connect(self.open_lexware_preview_dialog)
         self.offer_editor_button.clicked.connect(self.open_offer_editor_dialog)
         self.lexware_export_button.clicked.connect(self.export_selected_groups_to_lexware_draft)
+        self.open_pdf_folder_button.clicked.connect(self._open_pdf_download_folder)
         self.save_note_button.clicked.connect(self.save_note_for_selected)
         self.undo_button.clicked.connect(self.undo_last_action)
 
@@ -576,6 +617,7 @@ class MainWindow(QMainWindow):
         self.manual_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.changed_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.re_filter_combo.currentIndexChanged.connect(self.refresh_table)
+        self.tour_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.search_input.textChanged.connect(self.refresh_table)
         self.table_widget.itemSelectionChanged.connect(self.on_table_selection_changed)
         self.table_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
@@ -595,6 +637,7 @@ class MainWindow(QMainWindow):
         self._refresh_articles_for_mandant(self.active_mandant_id)
         self._apply_draft_defaults_for_mandant(self.active_mandant_id)
         self._refresh_article_template_combo_for_group(None)
+        self._refresh_pdf_download_controls()
 
     def _log_action(self, text: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -1305,6 +1348,105 @@ class MainWindow(QMainWindow):
         widget.setEnabled(True)
         widget.blockSignals(False)
 
+    def _sync_article_text_editors_from_group(self, group: dict | None) -> None:
+        title_widget = getattr(self, "article_title_edit", None)
+        comment_widget = getattr(self, "article_comment_edit", None)
+        save_button = getattr(self, "article_text_save_button", None)
+        if title_widget is None or comment_widget is None:
+            return
+
+        title_widget.blockSignals(True)
+        comment_widget.blockSignals(True)
+
+        if group is None:
+            title_widget.clear()
+            comment_widget.clear()
+            title_widget.setEnabled(False)
+            comment_widget.setEnabled(False)
+            if save_button is not None:
+                save_button.setEnabled(False)
+            title_widget.blockSignals(False)
+            comment_widget.blockSignals(False)
+            return
+
+        articles = self._selected_articles_for_group(group)
+        if not articles:
+            title_widget.clear()
+            comment_widget.clear()
+            title_widget.setEnabled(False)
+            comment_widget.setEnabled(False)
+            if save_button is not None:
+                save_button.setEnabled(False)
+            title_widget.blockSignals(False)
+            comment_widget.blockSignals(False)
+            return
+
+        article_list_widget = getattr(self, "article_list_widget", None)
+        selected_index = article_list_widget.currentRow() if article_list_widget is not None else 0
+        if selected_index < 0 or selected_index >= len(articles):
+            selected_index = 0
+
+        selected_article = articles[selected_index]
+        title_widget.setText(str(selected_article.get("Bezeichnung", "") or "").strip())
+        comment_widget.setPlainText(str(selected_article.get("Kommentar", "") or "").strip())
+        title_widget.setEnabled(True)
+        comment_widget.setEnabled(True)
+        if save_button is not None:
+            save_button.setEnabled(True)
+
+        title_widget.blockSignals(False)
+        comment_widget.blockSignals(False)
+
+    def save_article_text_for_group(self) -> None:
+        group = self._current_group_for_article_editing()
+        if group is None:
+            return
+
+        articles = self._selected_articles_for_group(group)
+        if not articles:
+            return
+
+        article_list_widget = getattr(self, "article_list_widget", None)
+        selected_index = article_list_widget.currentRow() if article_list_widget is not None else 0
+        if selected_index < 0 or selected_index >= len(articles):
+            selected_index = 0
+
+        title_widget = getattr(self, "article_title_edit", None)
+        comment_widget = getattr(self, "article_comment_edit", None)
+        if title_widget is None or comment_widget is None:
+            return
+
+        updated_article = dict(articles[selected_index])
+        new_title = str(title_widget.text() or "").strip()
+        if not new_title:
+            new_title = str(updated_article.get("Bezeichnung", "") or "").strip()
+        updated_article["Bezeichnung"] = new_title
+
+        new_comment = str(comment_widget.toPlainText() or "").strip()
+        current_title = str(articles[selected_index].get("Bezeichnung", "") or "").strip()
+        current_comment = str(articles[selected_index].get("Kommentar", "") or "").strip()
+        if current_title == new_title and current_comment == new_comment:
+            return
+
+        updated_article["Kommentar"] = new_comment
+        articles[selected_index] = updated_article
+        self._set_selected_articles_for_group(group, articles)
+
+        self._mark_changed([group])
+        self._save_manual_data()
+        self._refresh_article_editor_for_group(group)
+        self._refresh_group_view_after_article_change(group)
+        self._update_draft_preview()
+
+    def _auto_save_article_text_if_needed(self) -> None:
+        self.save_article_text_for_group()
+
+    def eventFilter(self, watched, event):
+        comment_widget = getattr(self, "article_comment_edit", None)
+        if watched is comment_widget and event is not None and event.type() == QEvent.FocusOut:
+            self._auto_save_article_text_if_needed()
+        return super().eventFilter(watched, event)
+
     def _on_article_price_changed(self) -> None:
         group = self._current_group_for_article_editing()
         if group is None:
@@ -1617,6 +1759,9 @@ class MainWindow(QMainWindow):
         group["selected_articles"] = normalized_articles
 
         if normalized_articles:
+            # Sobald wieder bewusst Artikel gesetzt sind, darf ein kundenspezifischer Default
+            # bei zukünftigem Leeren erneut greifen.
+            group["customer_defaults_articles_cleared_for"] = ""
             self._apply_article_to_group(group, normalized_articles[0])
         else:
             group["selected_article"] = {}
@@ -1823,6 +1968,7 @@ class MainWindow(QMainWindow):
             return
 
         self._clear_articles_for_group(group)
+        group["customer_defaults_articles_cleared_for"] = self._current_customer_template_key(group)
         self._mark_changed([group])
         self._save_manual_data()
         self._refresh_article_editor_for_group(group)
@@ -1833,6 +1979,7 @@ class MainWindow(QMainWindow):
         if group is not None:
             self._update_article_summary(group)
         self._sync_article_price_editor_from_group(group)
+        self._sync_article_text_editors_from_group(group)
 
     def _refresh_article_editor_for_group(self, group: dict | None) -> None:
         quick_input = getattr(self, "article_quick_select_input", None)
@@ -1848,6 +1995,7 @@ class MainWindow(QMainWindow):
                 article_list_widget.blockSignals(False)
             self._update_article_summary(None)
             self._sync_article_price_editor_from_group(None)
+            self._sync_article_text_editors_from_group(None)
             self._refresh_article_template_combo_for_group(None)
             if quick_input is not None:
                 quick_input.clear()
@@ -1870,6 +2018,7 @@ class MainWindow(QMainWindow):
             self.article_combo.blockSignals(False)
         self._update_article_summary(group)
         self._sync_article_price_editor_from_group(group)
+        self._sync_article_text_editors_from_group(group)
         self._refresh_article_template_combo_for_group(group)
         if quick_input is not None:
             quick_input.setEnabled(True)
@@ -2123,9 +2272,50 @@ class MainWindow(QMainWindow):
         self._apply_customer_matching_for_mandant(mandant_id)
         self._apply_draft_defaults_for_mandant(mandant_id)
         self._refresh_article_template_combo_for_group(self._current_group_for_article_editing())
+        self._refresh_pdf_download_controls()
         self._save_manual_data()
         self._log_action(f"Mandant gewechselt | {self._get_mandant_by_id(mandant_id).get('display_name', mandant_id)}")
         self.refresh_table()
+
+    def _refresh_pdf_download_controls(self) -> None:
+        label = getattr(self, "pdf_folder_label", None)
+        button = getattr(self, "open_pdf_folder_button", None)
+        service = getattr(self, "lexware_export_service", None)
+
+        if label is None or button is None:
+            return
+
+        if service is None:
+            label.setText("PDF-Ziel: nicht verfügbar")
+            button.setEnabled(False)
+            return
+
+        is_enabled = bool(getattr(service, "pdf_download_enabled", False))
+        folder = str(getattr(service, "pdf_downloads_directory", "") or "").strip()
+
+        if is_enabled and folder:
+            label.setText(f"PDF-Ziel: {folder}")
+            button.setEnabled(True)
+            button.setToolTip(folder)
+            return
+
+        label.setText("PDF-Ziel: nicht konfiguriert")
+        button.setEnabled(False)
+        button.setToolTip("")
+
+    def _open_pdf_download_folder(self) -> None:
+        service = getattr(self, "lexware_export_service", None)
+        folder = str(getattr(service, "pdf_downloads_directory", "") or "").strip() if service is not None else ""
+        if not folder:
+            QMessageBox.information(self, "PDF-Ordner", "Kein PDF-Zielordner konfiguriert.")
+            return
+
+        try:
+            path = Path(folder)
+            path.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.resolve())))
+        except Exception as exc:
+            QMessageBox.warning(self, "PDF-Ordner", f"Ordner konnte nicht geöffnet werden: {exc}")
 
     def open_context_menu(self, position) -> None:
         row = self.table_widget.rowAt(position.y())
@@ -2232,6 +2422,26 @@ class MainWindow(QMainWindow):
             "voucher_type": str(voucher_type_widget.currentData() or "quotation") if voucher_type_widget is not None else "quotation",
             "export_target": str(export_target_widget.currentData() or "draft") if export_target_widget is not None else "draft",
         }
+
+    def _payment_due_date_text(self, payment_term_days: int, group: dict | None = None) -> str:
+        try:
+            days = max(int(payment_term_days), 0)
+        except Exception:
+            days = 14
+
+        base_value = ""
+        if isinstance(group, dict):
+            base_value = str(group.get("datum", "") or "").strip()
+        base_date = self._parse_date(base_value)
+        if base_date == datetime.max:
+            base_date = datetime.now()
+
+        due_date = base_date + timedelta(days=days)
+        return due_date.strftime("%d.%m.%Y")
+
+    def _payment_term_label_for_group(self, payment_term_days: int, group: dict | None = None) -> str:
+        due_text = self._payment_due_date_text(payment_term_days, group)
+        return f"Zahlungsbedingungen: {int(payment_term_days)} Tage netto; Fällig am {due_text}"
 
     def _draft_templates_for_mandant(self) -> tuple[list[str], list[str]]:
         mandant = self._get_mandant_by_id(self.active_mandant_id)
@@ -2363,7 +2573,30 @@ class MainWindow(QMainWindow):
     def open_offer_editor_dialog(self) -> None:
         dialog = QDialog(self)
         dialog.setWindowTitle("Angebot / Rechnung bearbeiten")
-        dialog.resize(860, 760)
+        dialog.resize(720, 600)
+
+        invoice_introduction_text = (
+            "Sehr geehrte Damen und Herren,\n\n"
+            "hiermit erlaube ich mir folgendermaßen zu berechnen:"
+        )
+        invoice_remark_text = (
+            "Es gelten die Allgemeinen Lieferbedingungen für Erzeugnisse und Leistungen der Elektroindustrie und die Ergänzungsklausel Erweiterter Eigentumsvorbehalt. "
+            "Die Haftung für Vermögensschäden, wie Produktionsausfall, indirekte Schäden oder entgangenen Gewinn, ist in jedem Fall ausgeschlossen.\n\n"
+            "Ich danke vielmals für den Auftrag und für Ihr Vertrauen und freue mich auf weiterhin gute Zusammenarbeit."
+        )
+        quotation_remark_text = (
+            "Es gelten die Allgemeinen Lieferbedingungen für Erzeugnisse und Leistungen der Elektroindustrie und\n"
+            "die Ergänzungsklausel Erweiterter Eigentumsvorbehalt. Die Haftung für Vermögensschäden, wie\n"
+            "Produktionsausfall, indirekte Schäden oder entgangenen Gewinn, ist in jedem Fall ausgeschlossen.\n"
+            "Ich freue mich, wenn Ihnen mein Angebot zusagt und ich die Leistungen für Sie erbringen darf.\n"
+            "Voraussetzungen:\n"
+            "Baustellen müssen frei zugänglich sein. Am Tag der Prüfungen und Tests dürfen keine\n"
+            "Baustellenfahrzeuge in und um der Trafostation die Sicherheit der Mitarbeiter gefährden. Somit können\n"
+            "an diesem Tag keine Pflasterarbeiten, Baggerarbeiten, Kabelverlegungen oder ähnliches durchgeführt\n"
+            "werden.\n"
+            "Bei Wiederholungsprüfungen ist vorher zu kontrollieren, dass die Stationen nicht eingewachsen sind und\n"
+            "ein Erreichen und Öffnen der Türen möglich ist."
+        )
 
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
@@ -2375,30 +2608,19 @@ class MainWindow(QMainWindow):
         export_target_combo = QComboBox()
         export_target_combo.addItem("Als Draft ablegen", "draft")
         export_target_combo.addItem("Finalisieren", "finalize")
-        intro_templates, remark_templates = self._draft_templates_for_mandant()
+        intro_templates, _remark_templates = self._draft_templates_for_mandant()
+        remark_templates = [quotation_remark_text]
 
         intro_template_combo = QComboBox()
         intro_template_combo.addItems(intro_templates)
-        intro_edit = QPlainTextEdit(self.draft_introduction_edit.toPlainText().strip())
-        intro_edit.setMinimumHeight(90)
+        initial_intro = self.draft_introduction_edit.toPlainText().strip() or (intro_templates[0] if intro_templates else "")
+        intro_edit = QPlainTextEdit(initial_intro)
+        intro_edit.setMinimumHeight(60)
 
         remark_template_combo = QComboBox()
         remark_template_combo.addItems(remark_templates)
-        remark_edit = QPlainTextEdit(self.draft_remark_edit.toPlainText().strip())
-        remark_edit.setMinimumHeight(90)
-
-        lexware_customer_combo = QComboBox()
-        lexware_customer_combo.setMinimumWidth(380)
-        lexware_customer_combo.addItem("Aktueller Kunde (aus Auswahl)", "")
-
-        lexware_template_combo = QComboBox()
-        lexware_template_combo.setMinimumWidth(380)
-        lexware_template_combo.addItem("Keine Lexware-Vorlage geladen", -1)
-
-        lexware_status_label = QLabel("Lexware: noch nicht geladen")
-        lexware_load_button = QPushButton("Lexware Vorlagen laden")
-        customer_only_templates_check = QCheckBox("Nur kundenspezifische Vorlagen anzeigen")
-        customer_only_templates_check.setChecked(True)
+        remark_edit = QPlainTextEdit(quotation_remark_text)
+        remark_edit.setMinimumHeight(70)
 
         def _apply_intro_template(index: int) -> None:
             if 0 <= index < len(intro_templates):
@@ -2407,6 +2629,33 @@ class MainWindow(QMainWindow):
         def _apply_remark_template(index: int) -> None:
             if 0 <= index < len(remark_templates):
                 remark_edit.setPlainText(remark_templates[index])
+
+        def _apply_text_defaults_for_voucher_type(voucher_type: str) -> None:
+            nonlocal intro_templates, remark_templates
+
+            if voucher_type == "invoice":
+                intro_templates = [invoice_introduction_text]
+                remark_templates = [invoice_remark_text]
+            else:
+                intro_templates, _ = self._draft_templates_for_mandant()
+                if not intro_templates:
+                    intro_templates = [self.draft_introduction_edit.toPlainText().strip() or ""]
+                remark_templates = [quotation_remark_text]
+
+            intro_template_combo.blockSignals(True)
+            intro_template_combo.clear()
+            intro_template_combo.addItems(intro_templates)
+            intro_template_combo.setCurrentIndex(0)
+            intro_template_combo.blockSignals(False)
+
+            remark_template_combo.blockSignals(True)
+            remark_template_combo.clear()
+            remark_template_combo.addItems(remark_templates)
+            remark_template_combo.setCurrentIndex(0)
+            remark_template_combo.blockSignals(False)
+
+            intro_edit.setPlainText(intro_templates[0] if intro_templates else "")
+            remark_edit.setPlainText(remark_templates[0] if remark_templates else "")
 
         intro_template_combo.currentIndexChanged.connect(_apply_intro_template)
         remark_template_combo.currentIndexChanged.connect(_apply_remark_template)
@@ -2438,156 +2687,110 @@ class MainWindow(QMainWindow):
             title_preview_label.setText(f"{title_type}{suffix}")
 
         title_type_combo.currentIndexChanged.connect(_refresh_title_preview)
+        title_type_combo.currentIndexChanged.connect(
+            lambda _: _apply_text_defaults_for_voucher_type(str(title_type_combo.currentData() or "quotation"))
+        )
         _refresh_title_preview()
+        _apply_text_defaults_for_voucher_type(str(title_type_combo.currentData() or "quotation"))
 
-        current_customer_name = ""
-        current_customer_number = ""
-        if group is not None:
-            current_customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "") or "").strip()
-            current_customer_number = str(group.get("customer_match_number", "") or "").strip()
+        def _extract_payment_term_days_from_template(template: dict) -> int | None:
+            if not isinstance(template, dict):
+                return None
 
-        loaded_templates: list[dict] = []
-        all_templates: list[dict] = []
+            candidate_values = [
+                template.get("payment_term_days"),
+                template.get("paymentTermDays"),
+                template.get("paymentTermDuration"),
+                template.get("days"),
+            ]
 
-        def _selected_customer_filter() -> tuple[str, str]:
-            selected_customer = lexware_customer_combo.currentData()
-            if isinstance(selected_customer, dict):
-                number = str(selected_customer.get("customer_number", "") or "").strip()
-                name = str(selected_customer.get("name", "") or "").strip()
-                return number, name
-            return current_customer_number, current_customer_name
+            payment_conditions = template.get("paymentConditions")
+            if isinstance(payment_conditions, dict):
+                candidate_values.extend([
+                    payment_conditions.get("paymentTermDuration"),
+                    payment_conditions.get("payment_term_days"),
+                ])
 
-        def _populate_lexware_template_combo(templates: list[dict]) -> None:
-            lexware_template_combo.blockSignals(True)
-            lexware_template_combo.clear()
-            if not templates:
-                lexware_template_combo.addItem("Keine passende Lexware-Vorlage gefunden", -1)
-            else:
-                for idx, template in enumerate(templates):
-                    lexware_template_combo.addItem(self._lexware_template_display_text(template), idx)
-            lexware_template_combo.blockSignals(False)
+            for value in candidate_values:
+                try:
+                    number = int(value)
+                except Exception:
+                    number = None
+                if number is not None and 0 <= number <= 365:
+                    return number
 
-        def _filter_templates_for_ui(templates: list[dict]) -> list[dict]:
-            selected_customer = lexware_customer_combo.currentData()
-            selected_number = ""
-            selected_name = ""
-            if isinstance(selected_customer, dict):
-                selected_number = str(selected_customer.get("customer_number", "") or "").strip().lower()
-                selected_name = str(selected_customer.get("name", "") or "").strip().lower()
-            elif current_customer_number or current_customer_name:
-                selected_number = str(current_customer_number or "").strip().lower()
-                selected_name = str(current_customer_name or "").strip().lower()
-
-            if not customer_only_templates_check.isChecked():
-                return list(templates)
-
-            filtered = []
-            for template in templates:
-                t_number = str(template.get("customer_number", "") or "").strip().lower()
-                t_name = str(template.get("customer_name", "") or "").strip().lower()
-                if not (t_number or t_name):
+            for text in [
+                str(template.get("name", "") or ""),
+                str(template.get("description", "") or ""),
+                str(template.get("paymentTermLabel", "") or ""),
+            ]:
+                match = re.search(r"(\d{1,3})\s*Tage", text, flags=re.IGNORECASE)
+                if not match:
                     continue
-                if selected_number and t_number and selected_number in t_number:
-                    filtered.append(template)
+                try:
+                    number = int(match.group(1))
+                except Exception:
                     continue
-                if selected_name and t_name and selected_name in t_name:
-                    filtered.append(template)
+                if 0 <= number <= 365:
+                    return number
+
+            return None
+
+        payment_term_combo = QComboBox()
+        payment_term_combo.setMinimumWidth(260)
+        payment_term_preview_label = QLabel()
+        payment_term_preview_label.setWordWrap(True)
+
+        def _selected_payment_term_days() -> int:
+            try:
+                return max(int(payment_term_combo.currentData()), 0)
+            except Exception:
+                return 14
+
+        def _set_payment_term_options(days_values: list[int], preferred_day: int | None = None) -> None:
+            normalized: list[int] = []
+            for value in days_values:
+                try:
+                    day = max(int(value), 0)
+                except Exception:
                     continue
-                if not selected_number and not selected_name:
-                    filtered.append(template)
-            return filtered
+                if day not in normalized:
+                    normalized.append(day)
 
-        def _apply_lexware_template(index: int) -> None:
-            if not (0 <= index < len(loaded_templates)):
-                return
-            template = loaded_templates[index]
-            intro = str(template.get("introduction", "") or "").strip()
-            remark = str(template.get("remark", "") or "").strip()
-            if intro:
-                intro_edit.setPlainText(intro)
-            if remark:
-                remark_edit.setPlainText(remark)
+            if not normalized:
+                normalized = [14, 30]
 
-        def _load_lexware_templates_for_selected_customer() -> None:
-            customer_number, customer_name = _selected_customer_filter()
-            templates, error_text = self._load_lexware_templates(
-                customer_number=customer_number,
-                customer_name=customer_name,
+            normalized.sort()
+
+            keep_day = preferred_day if preferred_day is not None else _selected_payment_term_days()
+            if keep_day not in normalized:
+                normalized.append(keep_day)
+                normalized.sort()
+
+            payment_term_combo.blockSignals(True)
+            payment_term_combo.clear()
+            for day in normalized:
+                payment_term_combo.addItem(f"{day} Tage netto", day)
+
+            index = payment_term_combo.findData(keep_day)
+            if index < 0:
+                index = 0
+            payment_term_combo.setCurrentIndex(index)
+            payment_term_combo.blockSignals(False)
+
+            _refresh_payment_term_preview()
+
+        def _refresh_payment_term_preview() -> None:
+            payment_term_preview_label.setText(
+                self._payment_term_label_for_group(_selected_payment_term_days(), group)
             )
-            all_templates.clear()
-            all_templates.extend(templates)
-            loaded_templates.clear()
-            filtered_templates = _filter_templates_for_ui(all_templates)
-            fallback_to_all = False
-            if not filtered_templates and all_templates and customer_only_templates_check.isChecked():
-                # UX-Fallback: lieber globale Vorlagen zeigen als leere Liste.
-                fallback_to_all = True
-                filtered_templates = list(all_templates)
 
-            loaded_templates.extend(filtered_templates)
-            _populate_lexware_template_combo(loaded_templates)
+        payment_term_combo.currentIndexChanged.connect(lambda _: _refresh_payment_term_preview())
 
-            if error_text:
-                service = getattr(self, "lexware_export_service", None)
-                endpoint = str(getattr(service, "templates_endpoint", "/v1/text-modules") or "/v1/text-modules")
-                lexware_status_label.setText(f"Lexware: {self._humanize_lexware_error(error_text, endpoint)}")
-            else:
-                status = f"Lexware: {len(all_templates)} geladen, {len(loaded_templates)} angezeigt"
-                if fallback_to_all:
-                    status += " (kundenbezogen 0 Treffer -> globale Vorlagen gezeigt)"
-                lexware_status_label.setText(status)
+        initial_payment_days = int(self.draft_payment_term_days_spin.value())
+        _set_payment_term_options([14, 30, initial_payment_days], preferred_day=initial_payment_days)
 
-        def _load_lexware_data() -> None:
-            customers, customer_error = self._load_lexware_customers()
-            lexware_customer_combo.blockSignals(True)
-            lexware_customer_combo.clear()
-            current_text = current_customer_name or "Unbekannt"
-            if current_customer_number:
-                current_text += f" (Nr. {current_customer_number})"
-            lexware_customer_combo.addItem(f"Aktueller Kunde (aus Termin): {current_text}", "")
-
-            preselect_index = 0
-            lookup_name = self._normalize_customer_lookup_text(current_customer_name)
-            for customer in customers:
-                name = str(customer.get("name", "") or "").strip()
-                number = str(customer.get("customer_number", "") or "").strip()
-                city = str(customer.get("city", "") or "").strip()
-                if not name:
-                    continue
-                text = f"{name}"
-                if number:
-                    text += f" (Nr. {number})"
-                if city:
-                    text += f" - {city}"
-                lexware_customer_combo.addItem(text, customer)
-
-                if current_customer_number and number and current_customer_number == number:
-                    preselect_index = lexware_customer_combo.count() - 1
-                    continue
-
-                if lookup_name:
-                    candidate = self._normalize_customer_lookup_text(name)
-                    if candidate and (lookup_name in candidate or candidate in lookup_name):
-                        preselect_index = lexware_customer_combo.count() - 1
-
-            lexware_customer_combo.setCurrentIndex(preselect_index)
-            lexware_customer_combo.blockSignals(False)
-
-            _load_lexware_templates_for_selected_customer()
-            if customer_error and not loaded_templates:
-                service = getattr(self, "lexware_export_service", None)
-                endpoint = str(getattr(service, "customers_endpoint", "/v1/contacts") or "/v1/contacts")
-                lexware_status_label.setText(f"Lexware: {self._humanize_lexware_error(customer_error, endpoint)}")
-
-        lexware_load_button.clicked.connect(_load_lexware_data)
-        lexware_customer_combo.currentIndexChanged.connect(lambda _: _load_lexware_templates_for_selected_customer())
-        lexware_template_combo.currentIndexChanged.connect(_apply_lexware_template)
-        customer_only_templates_check.stateChanged.connect(lambda _: _load_lexware_templates_for_selected_customer())
-
-        payment_days = QSpinBox()
-        payment_days.setRange(0, 365)
-        payment_days.setValue(int(self.draft_payment_term_days_spin.value()))
-        payment_days.setSuffix(" Tage netto")
+        # Lexware-Template-UI wurde bewusst entfernt (kein nutzbarer Mehrwert im Dialog).
 
         form.addRow("Belegtyp", title_type_combo)
         form.addRow("Exportziel", export_target_combo)
@@ -2596,12 +2799,8 @@ class MainWindow(QMainWindow):
         form.addRow("Einleitung", intro_edit)
         form.addRow("Nachbemerkung Vorlage", remark_template_combo)
         form.addRow("Nachbemerkung", remark_edit)
-        form.addRow("Lexware Kunde", lexware_customer_combo)
-        form.addRow("Lexware Vorlage", lexware_template_combo)
-        form.addRow("Filter", customer_only_templates_check)
-        form.addRow("Lexware", lexware_load_button)
-        form.addRow("Status", lexware_status_label)
-        form.addRow("Zahlungsziel", payment_days)
+        form.addRow("Zahlungsziel Vorlage", payment_term_combo)
+        form.addRow("Zahlungsbedingungen", payment_term_preview_label)
 
         travel_mode_combo = QComboBox()
         travel_mode_combo.addItem("Fahrtkosten als extra Artikel", "extra_article")
@@ -2683,16 +2882,13 @@ class MainWindow(QMainWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
 
-        # Initialer Versuch, echte Lexware-Daten nachzuladen.
-        _load_lexware_data()
-
         if dialog.exec() != QDialog.Accepted:
             return
 
         self.draft_title_edit.setText(title_preview_label.text().strip())
         self.draft_introduction_edit.setPlainText(intro_edit.toPlainText().strip())
         self.draft_remark_edit.setPlainText(remark_edit.toPlainText().strip())
-        self.draft_payment_term_days_spin.setValue(int(payment_days.value()))
+        self.draft_payment_term_days_spin.setValue(_selected_payment_term_days())
         if getattr(self, "voucher_type_combo", None) is not None:
             voucher_index = self.voucher_type_combo.findData(str(title_type_combo.currentData() or "quotation"))
             self.voucher_type_combo.setCurrentIndex(voucher_index if voucher_index >= 0 else 0)
@@ -2795,7 +2991,10 @@ class MainWindow(QMainWindow):
 
         raw_references = str(defaults.get("article_references", "") or "").strip()
         has_articles = bool(self._selected_articles_for_group(group)) or bool(group.get("selected_article", {}))
-        if raw_references and not has_articles:
+        current_customer_key = self._current_customer_template_key(group)
+        cleared_for = str(group.get("customer_defaults_articles_cleared_for", "") or "").strip()
+        defaults_were_explicitly_cleared = bool(current_customer_key) and current_customer_key == cleared_for
+        if raw_references and not has_articles and not defaults_were_explicitly_cleared:
             resolved_articles, _ = self._resolve_articles_from_reference(raw_references)
             if resolved_articles:
                 self._set_selected_articles_for_group(group, resolved_articles)
@@ -2888,7 +3087,7 @@ class MainWindow(QMainWindow):
             f"Exportziel: {'Draft' if settings.get('export_target') != 'finalize' else 'Finalisiert'}",
             f"Einleitung: {settings['introduction']}",
             f"Nachbemerkung: {settings['remark']}",
-            f"Zahlungsziel: {settings['payment_term_days']} Tage netto",
+            self._payment_term_label_for_group(settings["payment_term_days"], group),
         ]
 
         if group is not None:
@@ -3071,6 +3270,7 @@ class MainWindow(QMainWindow):
             "manuelle_notiz": group.get("manuelle_notiz", ""),
             "selected_article_key": group.get("selected_article_key", ""),
             "selected_article": group.get("selected_article", {}),
+            "customer_defaults_articles_cleared_for": group.get("customer_defaults_articles_cleared_for", ""),
             "_last_changed_at": group.get("_last_changed_at", ""),
             "lexware_export_status": group.get("lexware_export_status", ""),
             "lexware_export_id": group.get("lexware_export_id", ""),
@@ -3099,6 +3299,7 @@ class MainWindow(QMainWindow):
                 else:
                     group["selected_article"] = {}
                     group["selected_article_key"] = state_map[key].get("selected_article_key", "")
+                group["customer_defaults_articles_cleared_for"] = state_map[key].get("customer_defaults_articles_cleared_for", "")
                 group["_last_changed_at"] = state_map[key].get("_last_changed_at", "")
                 group["lexware_export_status"] = state_map[key].get("lexware_export_status", "")
                 group["lexware_export_id"] = state_map[key].get("lexware_export_id", "")
@@ -3170,6 +3371,7 @@ class MainWindow(QMainWindow):
             group.setdefault("selected_articles", [])
             group.setdefault("selected_article_key", "")
             group.setdefault("selected_article", {})
+            group.setdefault("customer_defaults_articles_cleared_for", "")
             group.setdefault("_last_changed_at", "")
             group.setdefault("lexware_export_status", "")
             group.setdefault("lexware_export_id", "")
@@ -3453,6 +3655,7 @@ class MainWindow(QMainWindow):
                 "selected_articles": group.get("selected_articles", []),
                 "selected_article_key": group.get("selected_article_key", ""),
                 "selected_article": group.get("selected_article", {}),
+                "customer_defaults_articles_cleared_for": group.get("customer_defaults_articles_cleared_for", ""),
                 "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
                 "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
                 "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
@@ -3505,6 +3708,7 @@ class MainWindow(QMainWindow):
                 "selected_articles": group.get("selected_articles", []),
                 "selected_article_key": group.get("selected_article_key", ""),
                 "selected_article": group.get("selected_article", {}),
+                "customer_defaults_articles_cleared_for": group.get("customer_defaults_articles_cleared_for", ""),
                 "travel_mode": group.get("travel_mode", self._default_travel_mode_for_group(group)),
                 "travel_forward_assignment_rule": group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule()),
                 "multi_day_allowance_assignment_rule": group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule()),
@@ -3582,6 +3786,7 @@ class MainWindow(QMainWindow):
                     else:
                         group["selected_article"] = {}
                         group["selected_article_key"] = entry.get("selected_article_key", "")
+                    group["customer_defaults_articles_cleared_for"] = entry.get("customer_defaults_articles_cleared_for", "")
                     group["_last_changed_at"] = entry.get("_last_changed_at", "")
                     group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
                     group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
@@ -3651,6 +3856,7 @@ class MainWindow(QMainWindow):
                             group["selected_articles"] = []
                             group["selected_article"] = {}
                             group["selected_article_key"] = entry.get("selected_article_key", "")
+                    group["customer_defaults_articles_cleared_for"] = entry.get("customer_defaults_articles_cleared_for", "")
                     group["lexware_export_status"] = entry.get("lexware_export_status", "")
                     group["lexware_export_id"] = entry.get("lexware_export_id", "")
                     group["lexware_export_resource_uri"] = entry.get("lexware_export_resource_uri", "")
@@ -3988,6 +4194,7 @@ class MainWindow(QMainWindow):
                 introduction=export_settings["introduction"],
                 remark=export_settings["remark"],
                 payment_term_days=export_settings["payment_term_days"],
+                payment_term_label=self._payment_term_label_for_group(export_settings["payment_term_days"], group),
                 update_existing=should_overwrite,
                 export_reference=export_reference,
                 voucher_type=voucher_type,
@@ -4142,11 +4349,34 @@ class MainWindow(QMainWindow):
             candidates = []
         return any(value == "x" for value in candidates)
 
+    def _is_multi_day_tour(self, group: dict) -> bool:
+        start_raw = str(group.get("zeitraum_von", "") or group.get("datum", "")).strip()
+        end_raw = str(group.get("zeitraum_bis", "") or group.get("datum", "")).strip()
+
+        start_dt = self._parse_date(start_raw)
+        end_dt = self._parse_date(end_raw)
+        if start_dt != datetime.max and end_dt != datetime.max:
+            return start_dt.date() != end_dt.date()
+
+        entries = group.get("eintraege", [])
+        if isinstance(entries, list) and entries:
+            unique_dates = set()
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                parsed = self._parse_date(str(entry.get("datum", "") or "").strip())
+                if parsed != datetime.max:
+                    unique_dates.add(parsed.date().isoformat())
+            return len(unique_dates) > 1
+
+        return False
+
     def refresh_table(self) -> None:
         auto_filter_text = self.auto_filter_combo.currentText()
         manual_filter_text = self.manual_filter_combo.currentText()
         changed_filter_text = self.changed_filter_combo.currentText()
         re_filter_text = self.re_filter_combo.currentText()
+        tour_filter_text = self.tour_filter_combo.currentText()
         search_text = self.search_input.text().strip().lower()
 
         if auto_filter_text == "Nur Einsätze":
@@ -4174,6 +4404,11 @@ class MainWindow(QMainWindow):
             filtered_groups = [g for g in filtered_groups if not self._has_re_done_marker(g)]
         elif re_filter_text == "Nur mit RE-x":
             filtered_groups = [g for g in filtered_groups if self._has_re_done_marker(g)]
+
+        if tour_filter_text == "Nur Eintages":
+            filtered_groups = [g for g in filtered_groups if not self._is_multi_day_tour(g)]
+        elif tour_filter_text == "Nur Mehrtages":
+            filtered_groups = [g for g in filtered_groups if self._is_multi_day_tour(g)]
 
         if search_text:
             visible_groups = [g for g in filtered_groups if search_text in self._build_search_text(g)]
@@ -4273,7 +4508,12 @@ class MainWindow(QMainWindow):
             if column == 5:
                 return g.get("projekt_roh", "").lower()
             if column == 6:
-                return ", ".join(g.get("mitarbeiter_liste", [])).lower()
+                return (
+                    ", ".join(g.get("mitarbeiter_liste", [])).lower(),
+                    self._parse_date(g.get("datum", "")),
+                    g.get("kunde_roh", "").lower(),
+                    g.get("projekt_roh", "").lower(),
+                )
             if column == 7:
                 order = {"Offen": 0, "Prüfen": 1, "Freigegeben": 2, "Ignorieren": 3, "Prüffall": 4}
                 return order.get(self._status_text(g), 99)
@@ -4445,6 +4685,148 @@ class MainWindow(QMainWindow):
 
         return "\n".join(detail_lines)
 
+    def _build_lexware_preview_text(self, payload: dict, voucher_type: str, export_target: str) -> str:
+        lines: list[str] = []
+        lines.append("LEXWARE-VORSCHAU (vor Export)")
+        lines.append("=" * 34)
+        lines.append(f"Belegtyp: {'Angebot' if voucher_type == 'quotation' else 'Rechnung'}")
+        lines.append(f"Exportziel: {'Finalisieren' if export_target == 'finalize' else 'Draft'}")
+        lines.append("")
+
+        title = str(payload.get("title", "") or "").strip()
+        voucher_date = str(payload.get("voucherDate", "") or "").strip()
+        lines.append(f"Titel: {title}")
+        lines.append(f"Belegdatum: {voucher_date}")
+
+        address = payload.get("address", {}) if isinstance(payload.get("address"), dict) else {}
+        address_name = str(address.get("name", "") or "").strip()
+        address_street = str(address.get("street", "") or "").strip()
+        address_zip = str(address.get("zip", "") or "").strip()
+        address_city = str(address.get("city", "") or "").strip()
+        address_country = str(address.get("countryCode", "") or "").strip()
+        lines.append("Kunde:")
+        lines.append(f"- {address_name}")
+        lines.append(f"- {address_street}")
+        lines.append(f"- {address_zip} {address_city}".strip())
+        lines.append(f"- {address_country}")
+        lines.append("")
+
+        introduction = str(payload.get("introduction", "") or "").strip()
+        remark = str(payload.get("remark", "") or "").strip()
+        lines.append("Einleitung:")
+        lines.append(introduction or "-")
+        lines.append("")
+
+        payment_conditions = payload.get("paymentConditions", {}) if isinstance(payload.get("paymentConditions"), dict) else {}
+        payment_label = str(payment_conditions.get("paymentTermLabel", "") or "").strip()
+        payment_days = str(payment_conditions.get("paymentTermDuration", "") or "").strip()
+        lines.append("Zahlungsbedingungen:")
+        lines.append(payment_label or f"{payment_days} Tage netto")
+        lines.append("")
+
+        line_items = payload.get("lineItems", []) if isinstance(payload.get("lineItems"), list) else []
+        lines.append("Positionen:")
+        if not line_items:
+            lines.append("- Keine Positionen")
+        else:
+            total_net = 0.0
+            for idx, item in enumerate(line_items, start=1):
+                if not isinstance(item, dict):
+                    continue
+
+                name = str(item.get("name", "") or "").strip()
+                description = str(item.get("description", "") or "").strip()
+                quantity = float(item.get("quantity", 0.0) or 0.0)
+                unit_name = str(item.get("unitName", "") or "").strip()
+                unit_price = item.get("unitPrice", {}) if isinstance(item.get("unitPrice"), dict) else {}
+                net_amount = float(unit_price.get("netAmount", 0.0) or 0.0)
+                tax_rate = float(unit_price.get("taxRatePercentage", 0.0) or 0.0)
+                line_net = quantity * net_amount
+                total_net += line_net
+
+                lines.append(f"{idx}. {name}")
+                if description:
+                    lines.append(f"   Text: {description}")
+                lines.append(
+                    f"   Menge: {quantity:g} {unit_name} | Einzelpreis netto: {net_amount:.2f} EUR | USt: {tax_rate:g}% | Summe netto: {line_net:.2f} EUR"
+                )
+
+            lines.append("")
+            lines.append(f"Gesamtsumme netto (Vorschau): {total_net:.2f} EUR")
+
+        lines.append("")
+        lines.append("Nachbemerkung:")
+        lines.append(remark or "-")
+
+        return "\n".join(lines)
+
+    def open_lexware_preview_dialog(self) -> None:
+        selected_groups = self._selected_groups()
+        if not selected_groups:
+            QMessageBox.information(self, "Rechnungsvorschau", "Bitte zuerst eine Gruppe auswählen.")
+            return
+
+        if len(selected_groups) != 1:
+            QMessageBox.information(self, "Rechnungsvorschau", "Bitte genau eine Gruppe für die Vorschau auswählen.")
+            return
+
+        group = selected_groups[0]
+        export_settings = self._draft_export_settings()
+        payment_label = self._payment_term_label_for_group(export_settings["payment_term_days"], group)
+        mandant_id = str(group.get("mandant_id", self.active_mandant_id) or self.active_mandant_id)
+        company_id = self._get_lexware_company_id_for_mandant(mandant_id)
+
+        if self.lexware_export_service is None or not hasattr(self.lexware_export_service, "build_payload_preview"):
+            QMessageBox.warning(self, "Rechnungsvorschau", "Lexware-Vorschau ist derzeit nicht verfügbar.")
+            return
+
+        preview_result = self.lexware_export_service.build_payload_preview(
+            group,
+            title=export_settings["title"],
+            introduction=export_settings["introduction"],
+            remark=export_settings["remark"],
+            payment_term_days=export_settings["payment_term_days"],
+            payment_term_label=payment_label,
+            voucher_type=export_settings["voucher_type"],
+            company_id=company_id,
+        )
+
+        if not preview_result.get("success"):
+            QMessageBox.warning(
+                self,
+                "Rechnungsvorschau",
+                f"Vorschau konnte nicht erzeugt werden: {preview_result.get('error', 'Unbekannter Fehler')}",
+            )
+            return
+
+        payload = preview_result.get("payload", {})
+        preview_text = self._build_lexware_preview_text(
+            payload,
+            export_settings["voucher_type"],
+            export_settings["export_target"],
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Rechnungsvorschau (Lexware-nah)")
+        dialog.resize(900, 700)
+
+        layout = QVBoxLayout(dialog)
+        text_view = QPlainTextEdit()
+        text_view.setReadOnly(True)
+        text_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        text_view.setPlainText(preview_text)
+        layout.addWidget(text_view)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        close_btn = buttons.button(QDialogButtonBox.Close)
+        if close_btn is not None:
+            close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.exec()
+
     def _update_summary_bar(self) -> None:
         visible_count = len(self.visible_groups)
         selected_count = len(self._selected_rows())
@@ -4537,6 +4919,7 @@ class MainWindow(QMainWindow):
             selected_articles = group.get("selected_articles", [])
             selected_article_key = group.get("selected_article_key", "")
             selected_article = group.get("selected_article", {})
+            customer_defaults_articles_cleared_for = group.get("customer_defaults_articles_cleared_for", "")
             travel_mode = group.get("travel_mode", self._default_travel_mode_for_group(group))
             travel_forward_assignment_rule = group.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())
             multi_day_allowance_assignment_rule = group.get("multi_day_allowance_assignment_rule", self._default_multi_day_allowance_assignment_rule())
@@ -4549,13 +4932,14 @@ class MainWindow(QMainWindow):
             export_id = group.get("lexware_export_id", "")
             export_resource_uri = group.get("lexware_export_resource_uri", "")
             exported_at = group.get("lexware_exported_at", "")
-            if manual_status != "offen" or manual_note or selected_articles or selected_article_key or selected_article or export_status or export_id or export_resource_uri or exported_at or travel_hours or travel_km:
+            if manual_status != "offen" or manual_note or selected_articles or selected_article_key or selected_article or customer_defaults_articles_cleared_for or export_status or export_id or export_resource_uri or exported_at or travel_hours or travel_km:
                 manual_data[key] = {
                     "manueller_status": manual_status,
                     "manuelle_notiz": manual_note,
                     "selected_articles": selected_articles,
                     "selected_article_key": selected_article_key,
                     "selected_article": selected_article,
+                    "customer_defaults_articles_cleared_for": customer_defaults_articles_cleared_for,
                     "travel_mode": travel_mode,
                     "travel_forward_assignment_rule": travel_forward_assignment_rule,
                     "multi_day_allowance_assignment_rule": multi_day_allowance_assignment_rule,
@@ -4614,6 +4998,7 @@ class MainWindow(QMainWindow):
                         group["selected_articles"] = []
                         group["selected_article"] = {}
                         group["selected_article_key"] = entry.get("selected_article_key", "")
+                group["customer_defaults_articles_cleared_for"] = entry.get("customer_defaults_articles_cleared_for", "")
 
                 group["travel_mode"] = entry.get("travel_mode", self._default_travel_mode_for_group(group))
                 group["travel_forward_assignment_rule"] = entry.get("travel_forward_assignment_rule", self._default_travel_forward_assignment_rule())

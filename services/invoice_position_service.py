@@ -130,8 +130,9 @@ class InvoicePositionService:
             article_tax_rate = self._parse_tax_rate(article.get("Steuerart", "")) or 19.0
             article_description = str(article.get("Beschreibung", "") or "").strip()
             article_note = str(article.get("Notiz", "") or "").strip()
+            article_comment = str(article.get("Kommentar", "") or "").strip()
 
-            description_parts = [part for part in [article_description, article_note] if part]
+            description_parts = [part for part in [article_description, article_note, article_comment] if part]
             merged_description = "\n".join(description_parts)
 
             title_parts = []
@@ -237,14 +238,64 @@ class InvoicePositionService:
         else:
             segment_desc = "Hin- und Rückfahrt"
         
-        route_segments = group.get("travel_route_segments", [])
-        route_info = ""
-        if isinstance(route_segments, list) and route_segments:
-            cleaned_segments = [str(seg).strip() for seg in route_segments if str(seg).strip()]
-            if cleaned_segments:
-                route_info = f" ({' | '.join(cleaned_segments)})"
-        
+        route_text = self._route_places_text(group)
+        route_info = f" | Route: {route_text}" if route_text else ""
+
         return f"Fahrtkostenangaben: {hours:.2f} h, {km_display} km ({segment_desc}){route_info}"
+
+    def _route_places_text(self, group: dict) -> str:
+        segments = group.get("travel_route_segments", [])
+        places: list[str] = []
+
+        if isinstance(segments, list) and segments:
+            for segment in segments:
+                text = str(segment or "").strip()
+                if not text:
+                    continue
+                if "->" in text:
+                    left, right = text.split("->", 1)
+                    left_place = self._extract_place_name(left)
+                    right_place = self._extract_place_name(right)
+                    for place in [left_place, right_place]:
+                        if place and (not places or places[-1] != place):
+                            places.append(place)
+                else:
+                    place = self._extract_place_name(text)
+                    if place and (not places or places[-1] != place):
+                        places.append(place)
+
+        if not places:
+            start_place = self._extract_place_name(str(group.get("travel_route_origin", "") or ""))
+            end_place = self._extract_place_name(str(group.get("travel_route_destination", "") or ""))
+            for place in [start_place, end_place]:
+                if place and (not places or places[-1] != place):
+                    places.append(place)
+
+        return " -> ".join(places)
+
+    def _extract_place_name(self, text: str) -> str:
+        value = str(text or "").strip()
+        if not value:
+            return ""
+
+        # Häufigstes Muster: Straße, PLZ Ort
+        parts = [part.strip() for part in value.replace(";", ",").split(",") if part.strip()]
+        candidate = parts[-1] if parts else value
+
+        match_city_with_zip = re.search(r"\b\d{5}\s+([A-Za-zÄÖÜäöüß\- ]+)", candidate)
+        if match_city_with_zip:
+            return match_city_with_zip.group(1).strip()
+
+        # Falls im letzten Segment keine PLZ steht, aber im gesamten Text.
+        match_city_anywhere = re.search(r"\b\d{5}\s+([A-Za-zÄÖÜäöüß\- ]+)", value)
+        if match_city_anywhere:
+            return match_city_anywhere.group(1).strip()
+
+        # Straßenfragmente und Zahlen reduzieren, damit ein Ortsname übrig bleibt.
+        candidate = re.sub(r"\b\d{1,5}[A-Za-z]?\b", " ", candidate)
+        candidate = re.sub(r"\b(stra(?:sse|ße)|str\.?|weg|platz|allee|gasse|ring|chaussee)\b", " ", candidate, flags=re.IGNORECASE)
+        candidate = re.sub(r"\s+", " ", candidate).strip(" ,.-")
+        return candidate.strip()
 
     def _travel_amount(self, group: dict) -> float:
         hours = self._as_float(group.get("travel_hours", 0.0), 0.0)

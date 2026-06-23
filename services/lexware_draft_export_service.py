@@ -30,6 +30,7 @@ class LexwareDraftExportService:
         self.pdf_downloads_directory = os.getenv("LEXWARE_PDF_DOWNLOADS_DIRECTORY", "").strip()
         self.pdf_endpoint_template = os.getenv("LEXWARE_VOUCHER_PDF_ENDPOINT_TEMPLATE", "/v1/vouchers/{id}/files/document").strip() or "/v1/vouchers/{id}/files/document"
         self.position_service = InvoicePositionService()
+        self._customer_resolution_cache: dict[str, dict] = {}
 
         if not self.token_url and self.base_url:
             self.token_url = f"{self.base_url.rstrip('/')}/oauth/token"
@@ -54,8 +55,8 @@ class LexwareDraftExportService:
         if self.web_url_template and "{id}" in self.web_url_template:
             voucher_id = value.rstrip("/").split("/")[-1]
             return self.web_url_template.replace("{id}", voucher_id)
-        if value.startswith("http"):
-            return value
+        # Ohne konfiguriertes WEB-Template liefern API-Resource-URIs in Browsern
+        # haeufig nur Zugriffsfehler. Deshalb bewusst kein Fallback auf API-URLs.
         return ""
 
     def download_voucher_pdf(self, voucher_id: str, company_id: str = "", filename: str = "") -> dict:
@@ -168,6 +169,7 @@ class LexwareDraftExportService:
             payment_term_days=payment_term_days,
             payment_term_label=payment_term_label,
             voucher_type=voucher_type,
+            company_id=company_id,
         )
         payload = payload_variants[0]
         endpoint_override = self._endpoint_for_voucher_type(voucher_type)
@@ -203,6 +205,40 @@ class LexwareDraftExportService:
         if not second_try.get("success"):
             second_try["error"] = f"{second_try.get('error')} (nach Token-Refresh)"
         return second_try
+
+    def build_payload_preview(
+        self,
+        group: dict,
+        title: str = "",
+        introduction: str = "",
+        remark: str = "",
+        payment_term_days: int | None = None,
+        payment_term_label: str = "",
+        voucher_type: str = "",
+        company_id: str = "",
+    ) -> dict:
+        try:
+            payload = self._build_payload(
+                group,
+                title=title,
+                introduction=introduction,
+                remark=remark,
+                payment_term_days=payment_term_days,
+                payment_term_label=payment_term_label,
+                voucher_type=voucher_type,
+                company_id=company_id,
+            )
+            return {
+                "success": True,
+                "payload": payload,
+                "error": "",
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "payload": {},
+                "error": str(exc),
+            }
 
     def _is_lineitems_validation_error(self, result: dict) -> bool:
         if result.get("status_code") != 400:
@@ -730,24 +766,99 @@ class LexwareDraftExportService:
             or ""
         ).strip()
 
+        street = ""
+        zip_code = ""
         city = ""
+        country_code = ""
         addresses = item.get("addresses") if isinstance(item.get("addresses"), list) else []
         if addresses:
             first_address = addresses[0] if isinstance(addresses[0], dict) else {}
+            street = str(first_address.get("street") or first_address.get("line1") or "").strip()
+            zip_code = str(first_address.get("zip") or first_address.get("postalCode") or "").strip()
             city = str(first_address.get("city") or first_address.get("locality") or "").strip()
+            country_code = str(first_address.get("countryCode") or first_address.get("country") or "").strip()
         if not city and isinstance(company, dict):
             company_address = company.get("address") if isinstance(company.get("address"), dict) else {}
+            if not street:
+                street = str(company_address.get("street") or company_address.get("line1") or "").strip()
+            if not zip_code:
+                zip_code = str(company_address.get("zip") or company_address.get("postalCode") or "").strip()
             city = str(company_address.get("city") or company_address.get("locality") or "").strip()
+            if not country_code:
+                country_code = str(company_address.get("countryCode") or company_address.get("country") or "").strip()
         if not city:
             city = str(item.get("city") or item.get("ort") or item.get("Ort 1") or "").strip()
+        if not street:
+            street = str(item.get("street") or item.get("Strasse 1") or item.get("Straße 1") or "").strip()
+        if not zip_code:
+            zip_code = str(item.get("zip") or item.get("PLZ 1") or item.get("postalCode") or "").strip()
+        if not country_code:
+            country_code = str(item.get("countryCode") or item.get("country") or item.get("Land 1") or "").strip() or "DE"
 
         return {
             "id": customer_id,
             "customer_number": customer_number,
             "name": display_name,
+            "street": street,
+            "zip": zip_code,
             "city": city,
+            "country_code": country_code,
             "raw": item,
         }
+
+    def _resolve_customer_for_export(self, group: dict, company_id: str = "") -> dict:
+        customer_number = str(group.get("customer_match_number", "") or "").strip()
+        customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "") or "").strip()
+        if not customer_number and not customer_name:
+            return {}
+
+        cache_key = "|".join([
+            str(company_id or self.company_id).strip(),
+            customer_number.lower(),
+            customer_name.lower(),
+        ])
+        if cache_key in self._customer_resolution_cache:
+            return dict(self._customer_resolution_cache.get(cache_key, {}))
+
+        if not self.is_configured():
+            self._customer_resolution_cache[cache_key] = {}
+            return {}
+
+        query_text = customer_number or customer_name
+        result = self.fetch_customers(query=query_text, company_id=company_id)
+        customers = result.get("customers", []) if isinstance(result, dict) else []
+        if not isinstance(customers, list) or not customers:
+            self._customer_resolution_cache[cache_key] = {}
+            return {}
+
+        customer_number_norm = customer_number.lower()
+        customer_name_norm = customer_name.lower()
+
+        def _norm(text: str) -> str:
+            return " ".join(str(text or "").strip().lower().split())
+
+        resolved = None
+        if customer_number_norm:
+            for customer in customers:
+                number = str(customer.get("customer_number", "") or "").strip().lower()
+                if number and number == customer_number_norm:
+                    resolved = customer
+                    break
+
+        if resolved is None and customer_name_norm:
+            target_name = _norm(customer_name_norm)
+            for customer in customers:
+                candidate_name = _norm(str(customer.get("name", "") or ""))
+                if candidate_name and candidate_name == target_name:
+                    resolved = customer
+                    break
+
+        if resolved is None:
+            resolved = customers[0]
+
+        resolved_dict = dict(resolved) if isinstance(resolved, dict) else {}
+        self._customer_resolution_cache[cache_key] = resolved_dict
+        return dict(resolved_dict)
 
     def _normalize_template(self, item: dict) -> dict:
         template_id = str(item.get("id") or item.get("uuid") or "").strip()
@@ -826,10 +937,12 @@ class LexwareDraftExportService:
         payment_term_days: int | None = None,
         payment_term_label: str = "",
         voucher_type: str = "",
+        company_id: str = "",
     ) -> dict:
         customer_name = str(group.get("customer_match_name", "") or group.get("kunde_roh", "")).strip() or "Unbekannter Kunde"
         project_name = str(group.get("projekt_roh", "")).strip() or "Leistung"
-        voucher_date = self._as_lexware_datetime(group.get("datum", ""))
+        # Belegdatum soll das aktuelle Datum sein, nicht das Leistungsdatum.
+        voucher_date = datetime.now().astimezone().isoformat(timespec="milliseconds")
         effective_payment_term_days = self.default_payment_term_days if payment_term_days is None else max(int(payment_term_days), 0)
         effective_payment_term_label = str(payment_term_label or "").strip() or f"{effective_payment_term_days} Tage netto"
         
@@ -856,6 +969,14 @@ class LexwareDraftExportService:
         customer_zip = str(group.get("customer_match_zip", "") or "").strip()
         customer_city = str(group.get("customer_match_city", "") or "").strip()
         customer_country = str(group.get("customer_match_country", "") or "DE").strip() or "DE"
+
+        resolved_customer = self._resolve_customer_for_export(group, company_id=company_id)
+        if resolved_customer:
+            customer_name = str(resolved_customer.get("name", "") or customer_name).strip() or customer_name
+            customer_street = str(resolved_customer.get("street", "") or customer_street).strip()
+            customer_zip = str(resolved_customer.get("zip", "") or customer_zip).strip()
+            customer_city = str(resolved_customer.get("city", "") or customer_city).strip()
+            customer_country = str(resolved_customer.get("country_code", "") or customer_country).strip() or "DE"
 
         payload = {
             "voucherStatus": "draft",
@@ -949,6 +1070,7 @@ class LexwareDraftExportService:
         payment_term_days: int | None = None,
         payment_term_label: str = "",
         voucher_type: str = "",
+        company_id: str = "",
     ) -> list[dict]:
         base_payload = self._build_payload(
             group,
@@ -958,6 +1080,7 @@ class LexwareDraftExportService:
             payment_term_days=payment_term_days,
             payment_term_label=payment_term_label,
             voucher_type=voucher_type,
+            company_id=company_id,
         )
 
         nested_payload = dict(base_payload)

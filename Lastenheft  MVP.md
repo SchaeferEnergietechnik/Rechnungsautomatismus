@@ -1,10 +1,10 @@
 # LASTENHEFT / MVP
 ## Rechnungstool für Lexware-Rechnungsentwürfe
 
-Stand: 2026-06-22
+Stand: 2026-06-23
 Status: MVP-Fassung mit umgesetzten Erweiterungen
 
-Arbeitsstand 2026-06-22:
+Arbeitsstand 2026-06-23:
 - Teststand: 109/109 Tests gruen.
 - Feature-Stand ist in `main` enthalten.
 - CI auf `main` ist gruen.
@@ -536,6 +536,9 @@ Produktstand (Zusatz zum MVP-Kern):
 - Draft/Finalisieren sind im Exportdialog verfuegbar
 - PDF-Download nach erfolgreichem Export ist verfuegbar
 
+Hinweis zur Abgrenzung:
+- Fuer die MVP-Abnahme bleibt der Draft-Export der verpflichtende Kernpfad.
+
 ---
 
 # 29. Spätere Ausbaustufen
@@ -551,7 +554,7 @@ Nicht MVP, aber geplant:
 
 ---
 
-# 32. Umgesetzter Zusatzstand (2026-06-22)
+# 30. Umgesetzter Zusatzstand (2026-06-22)
 
 Bereits umgesetzt und im laufenden Stand aktiv:
 - Mandantenabhaengige Kontakte und Artikel
@@ -568,7 +571,7 @@ Bereits umgesetzt und im laufenden Stand aktiv:
 
 ---
 
-# 30. MVP-Erfolgskriterien
+# 31. MVP-Erfolgskriterien
 
 Das MVP gilt als erfolgreich, wenn folgende Kette funktioniert:
 
@@ -584,7 +587,7 @@ Das MVP gilt als erfolgreich, wenn folgende Kette funktioniert:
 
 ---
 
-# 31. Wichtiger Hinweis für späteren Codelstart
+# 32. Wichtiger Hinweis für späteren Codestart
 
 Vor dem eigentlichen Implementierungsstart soll noch **eine gebündelte Liste aller sinnvollen Excel-Anpassungen** erstellt werden, damit die Datei nur einmal sauber angepasst werden muss.
 
