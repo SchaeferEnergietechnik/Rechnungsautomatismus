@@ -30,7 +30,9 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QPlainTextEdit,
+    QScrollArea,
     QSplitter,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QDoubleSpinBox,
@@ -39,6 +41,151 @@ from PySide6.QtWidgets import (
     QWidget,
     QHeaderView,
 )
+
+
+APP_STYLESHEET = """
+QMainWindow, QDialog {
+    background: #f4f6f9;
+}
+QWidget {
+    color: #1f2530;
+    font-size: 12px;
+}
+QPushButton {
+    background: #ffffff;
+    border: 1px solid #c7d0dc;
+    border-radius: 6px;
+    padding: 5px 12px;
+    min-height: 20px;
+}
+QPushButton:hover {
+    background: #edf2f9;
+    border-color: #9db4d0;
+}
+QPushButton:pressed {
+    background: #dde7f3;
+}
+QPushButton:disabled {
+    color: #9aa4b2;
+    background: #f0f2f5;
+    border-color: #dde3ea;
+}
+QPushButton#primaryButton {
+    background: #2563eb;
+    border: 1px solid #1d4ed8;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 5px 16px;
+}
+QPushButton#primaryButton:hover {
+    background: #1d4ed8;
+}
+QPushButton#primaryButton:disabled {
+    background: #93b2ec;
+    color: #eef2fb;
+}
+QPushButton#approveButton {
+    background: #e7f5ec;
+    border-color: #9ed0b0;
+}
+QPushButton#approveButton:hover {
+    background: #d5ecdd;
+}
+QPushButton#reviewButton {
+    background: #fdf3e0;
+    border-color: #e2c186;
+}
+QPushButton#reviewButton:hover {
+    background: #f8e9c9;
+}
+QPushButton#ignoreButton {
+    background: #f6e8e8;
+    border-color: #d8a7a7;
+}
+QPushButton#ignoreButton:hover {
+    background: #efd9d9;
+}
+QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox {
+    background: #ffffff;
+    border: 1px solid #c7d0dc;
+    border-radius: 6px;
+    padding: 3px 6px;
+    min-height: 20px;
+}
+QComboBox:focus, QLineEdit:focus, QDoubleSpinBox:focus, QSpinBox:focus {
+    border-color: #2563eb;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QPlainTextEdit, QListWidget {
+    background: #ffffff;
+    border: 1px solid #d5dce5;
+    border-radius: 6px;
+}
+QTabWidget::pane {
+    border: 1px solid #d5dce5;
+    border-radius: 8px;
+    background: #ffffff;
+    top: -1px;
+}
+QTabBar::tab {
+    background: #e6ebf2;
+    border: 1px solid #d5dce5;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 6px 14px;
+    margin-right: 2px;
+}
+QTabBar::tab:selected {
+    background: #ffffff;
+    font-weight: 600;
+}
+QTabBar::tab:hover:!selected {
+    background: #eef2f8;
+}
+QStatusBar {
+    background: #e9edf3;
+    border-top: 1px solid #d5dce5;
+}
+QStatusBar QLabel {
+    margin: 0 8px;
+    color: #3c4657;
+}
+QMenuBar {
+    background: #e9edf3;
+    border-bottom: 1px solid #d5dce5;
+}
+QMenuBar::item {
+    padding: 5px 10px;
+    background: transparent;
+}
+QMenuBar::item:selected {
+    background: #d6e0ee;
+    border-radius: 4px;
+}
+QMenu {
+    background: #ffffff;
+    border: 1px solid #c7d0dc;
+    padding: 4px;
+}
+QMenu::item {
+    padding: 5px 24px 5px 12px;
+    border-radius: 4px;
+}
+QMenu::item:selected {
+    background: #e3ecf8;
+}
+QLabel#mutedLabel {
+    color: #5f6368;
+}
+QLabel#fieldLabel {
+    color: #3c4657;
+    font-weight: 600;
+}
+"""
 
 
 class MainWindow(QMainWindow):
@@ -74,6 +221,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.setWindowTitle("Rechnungsvorschlag Tool")
+        self.setStyleSheet(APP_STYLESHEET)
         screen = QApplication.primaryScreen()
         if screen is not None:
             available = screen.availableGeometry()
@@ -110,19 +258,15 @@ class MainWindow(QMainWindow):
         self._lexware_templates_cache: dict[str, list[dict]] = {}
         self._lexware_service_defaults: dict[str, str] | None = None
 
-        self.open_button = QPushButton("Datei öffnen")
-        self.load_project_button = QPushButton("Projekt laden")
-        self.save_project_button = QPushButton("Projekt speichern")
-        self.load_session_button = QPushButton("Sitzung laden")
-        self.save_session_button = QPushButton("Sitzung speichern")
-        self.export_csv_button = QPushButton("CSV exportieren")
-        self.export_json_button = QPushButton("JSON exportieren")
-        self.lexware_preview_button = QPushButton("Rechnungsvorschau")
-        self.lexware_export_button = QPushButton("Lexware exportieren")
-        self.offer_editor_button = QPushButton("Angebot/Rechnung bearbeiten")
-        self.open_pdf_folder_button = QPushButton("PDF-Ordner öffnen")
+        self.offer_editor_button = QPushButton("Angebot/Rechnung bearbeiten …")
+        self.offer_editor_button.setToolTip("Belegtitel, Texte, Zahlungsziel und Fahrtkosten für die Auswahl bearbeiten")
+        self.lexware_preview_button = QPushButton("Vorschau")
+        self.lexware_preview_button.setToolTip("Rechnungs-/Angebotsvorschau aus dem Exportpayload anzeigen")
+        self.lexware_export_button = QPushButton("Nach Lexware exportieren")
+        self.lexware_export_button.setObjectName("primaryButton")
+        self.open_pdf_folder_button = QPushButton("PDF-Ordner")
         self.pdf_folder_label = QLabel("PDF-Ziel: nicht konfiguriert")
-        self.pdf_folder_label.setStyleSheet("color: #5f6368;")
+        self.pdf_folder_label.setObjectName("mutedLabel")
         
         self.mandant_combo = QComboBox()
         self.mandant_combo.setMinimumWidth(250)
@@ -273,23 +417,29 @@ class MainWindow(QMainWindow):
             " }"
         )
 
-        self.mark_approved_button = QPushButton("Freigeben")
-        self.mark_review_button = QPushButton("Prüfen")
-        self.mark_ignore_button = QPushButton("Ignorieren")
-        self.undo_button = QPushButton("Letzte Änderung rückgängig")
+        self.undo_button = QPushButton("Rückgängig")
+        self.undo_button.setToolTip("Letzte Statusänderung rückgängig machen (Strg+Z)")
 
-        self.selection_approved_button = QPushButton("Auswahl freigeben")
-        self.selection_review_button = QPushButton("Auswahl prüfen")
-        self.selection_ignore_button = QPushButton("Auswahl ignorieren")
-        self.selection_open_button = QPushButton("Auswahl auf offen")
+        self.selection_approved_button = QPushButton("Freigeben")
+        self.selection_approved_button.setObjectName("approveButton")
+        self.selection_approved_button.setToolTip("Ausgewählte Zeilen freigeben (Taste F)")
+        self.selection_review_button = QPushButton("Prüfen")
+        self.selection_review_button.setObjectName("reviewButton")
+        self.selection_review_button.setToolTip("Ausgewählte Zeilen auf 'Prüfen' setzen (Taste P)")
+        self.selection_ignore_button = QPushButton("Ignorieren")
+        self.selection_ignore_button.setObjectName("ignoreButton")
+        self.selection_ignore_button.setToolTip("Ausgewählte Zeilen ignorieren (Taste I)")
+        self.selection_open_button = QPushButton("Auf offen")
+        self.selection_open_button.setToolTip("Ausgewählte Zeilen auf 'offen' zurücksetzen (Taste O)")
 
-        self.bulk_approved_button = QPushButton("Alle sichtbaren freigeben")
-        self.bulk_review_button = QPushButton("Alle sichtbaren prüfen")
-        self.bulk_ignore_button = QPushButton("Alle sichtbaren ignorieren")
-        self.bulk_open_button = QPushButton("Alle sichtbaren auf offen")
-
-        self.show_open_only_button = QPushButton("Nur offene anzeigen")
-        self.show_all_manual_button = QPushButton("Alle manuellen Status anzeigen")
+        self.bulk_action_button = QPushButton("Alle sichtbaren …")
+        self.bulk_action_button.setToolTip("Statusaktion auf alle aktuell sichtbaren Zeilen anwenden")
+        bulk_menu = QMenu(self.bulk_action_button)
+        bulk_menu.addAction("Alle sichtbaren freigeben", lambda: self.set_manual_status_for_visible("freigegeben"))
+        bulk_menu.addAction("Alle sichtbaren prüfen", lambda: self.set_manual_status_for_visible("pruefen"))
+        bulk_menu.addAction("Alle sichtbaren ignorieren", lambda: self.set_manual_status_for_visible("ignorieren"))
+        bulk_menu.addAction("Alle sichtbaren auf offen", lambda: self.set_manual_status_for_visible("offen"))
+        self.bulk_action_button.setMenu(bulk_menu)
 
         self.save_note_button = QPushButton("Notiz speichern")
 
@@ -390,89 +540,105 @@ class MainWindow(QMainWindow):
         self.log_view.setPlaceholderText("Änderungsverlauf der aktuellen Sitzung ...")
         self.log_view.setMinimumHeight(80)
 
+        # --- Menüleiste: Datei-, Projekt- und Exportfunktionen ---
+        menu_bar = self.menuBar()
+
+        file_menu = menu_bar.addMenu("&Datei")
+        open_action = file_menu.addAction("Excel-Datei öffnen …")
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(self.open_file_dialog)
+        file_menu.addSeparator()
+        load_project_action = file_menu.addAction("Projekt laden …")
+        load_project_action.triggered.connect(self.load_project_file)
+        save_project_action = file_menu.addAction("Projekt speichern …")
+        save_project_action.setShortcut("Ctrl+S")
+        save_project_action.triggered.connect(self.save_project_file)
+        file_menu.addSeparator()
+        load_session_action = file_menu.addAction("Sitzung laden …")
+        load_session_action.triggered.connect(self.load_session_file)
+        save_session_action = file_menu.addAction("Sitzung speichern …")
+        save_session_action.triggered.connect(self.save_session_file)
+        file_menu.addSeparator()
+        quit_action = file_menu.addAction("Beenden")
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(self.close)
+
+        export_menu = menu_bar.addMenu("&Export")
+        export_csv_action = export_menu.addAction("Sichtbare Gruppen als CSV …")
+        export_csv_action.triggered.connect(self.export_visible_groups_to_csv)
+        export_json_action = export_menu.addAction("Sichtbare Gruppen als JSON …")
+        export_json_action.triggered.connect(self.export_visible_groups_to_json)
+        export_menu.addSeparator()
+        export_pdf_folder_action = export_menu.addAction("PDF-Ordner öffnen")
+        export_pdf_folder_action.triggered.connect(self._open_pdf_download_folder)
+
+        edit_menu = menu_bar.addMenu("&Bearbeiten")
+        undo_action = edit_menu.addAction("Letzte Änderung rückgängig")
+        undo_action.triggered.connect(self.undo_last_action)
+        edit_menu.addSeparator()
+        open_only_action = edit_menu.addAction("Nur offene anzeigen")
+        open_only_action.triggered.connect(self.activate_open_only_mode)
+        show_all_action = edit_menu.addAction("Alle manuellen Status anzeigen")
+        show_all_action.triggered.connect(self.activate_show_all_mode)
+
+        # --- Kopfzeile: Kontext (Mandant, Belegtyp, Ziel) + Hauptaktionen ---
+        def _field_label(text: str) -> QLabel:
+            label = QLabel(text)
+            label.setObjectName("fieldLabel")
+            return label
+
         top_bar = QHBoxLayout()
-        top_bar.addWidget(self.open_button)
-        top_bar.addWidget(self.load_project_button)
-        top_bar.addWidget(self.save_project_button)
-        top_bar.addWidget(self.load_session_button)
-        top_bar.addWidget(self.save_session_button)
-        top_bar.addWidget(self.export_csv_button)
-        top_bar.addWidget(self.export_json_button)
+        top_bar.setSpacing(8)
+        top_bar.addWidget(_field_label("Mandant:"))
+        top_bar.addWidget(self.mandant_combo)
+        top_bar.addSpacing(12)
+        top_bar.addWidget(_field_label("Belegtyp:"))
+        top_bar.addWidget(self.voucher_type_combo)
+        top_bar.addWidget(_field_label("Exportziel:"))
+        top_bar.addWidget(self.export_target_combo)
+        top_bar.addStretch()
         top_bar.addWidget(self.offer_editor_button)
         top_bar.addWidget(self.lexware_preview_button)
         top_bar.addWidget(self.lexware_export_button)
-        top_bar.addWidget(QLabel("Belegtyp:"))
-        top_bar.addWidget(self.voucher_type_combo)
-        top_bar.addWidget(QLabel("Exportziel:"))
-        top_bar.addWidget(self.export_target_combo)
-        top_bar.addWidget(QLabel("Mandant:"))
-        top_bar.addWidget(self.mandant_combo)
-        top_bar.addWidget(self.open_pdf_folder_button)
-        top_bar.addWidget(self.pdf_folder_label)
-        top_bar.addStretch()
+
+        # --- Filterzeile ---
+        self.auto_filter_combo.setToolTip("Automatikstatus filtern")
+        self.manual_filter_combo.setToolTip("Manuellen Status filtern")
+        self.changed_filter_combo.setToolTip("Nach Änderungsstatus filtern")
+        self.re_filter_combo.setToolTip("Nach RE-Kennzeichen filtern")
+        self.tour_filter_combo.setToolTip("Nach Tourenart filtern")
 
         filter_bar = QHBoxLayout()
+        filter_bar.setSpacing(8)
+        filter_bar.addWidget(_field_label("Filter:"))
         filter_bar.addWidget(self.auto_filter_combo)
         filter_bar.addWidget(self.manual_filter_combo)
         filter_bar.addWidget(self.changed_filter_combo)
         filter_bar.addWidget(self.re_filter_combo)
         filter_bar.addWidget(self.tour_filter_combo)
-        filter_bar.addWidget(self.show_open_only_button)
-        filter_bar.addWidget(self.show_all_manual_button)
         filter_bar.addWidget(self.search_input, 1)
 
+        # --- Aktionszeile: Statusaktionen für Auswahl + Massenaktionen ---
         action_bar = QHBoxLayout()
-        action_bar.addWidget(self.mark_approved_button)
-        action_bar.addWidget(self.mark_review_button)
-        action_bar.addWidget(self.mark_ignore_button)
+        action_bar.setSpacing(8)
+        action_bar.addWidget(_field_label("Auswahl:"))
+        action_bar.addWidget(self.selection_approved_button)
+        action_bar.addWidget(self.selection_review_button)
+        action_bar.addWidget(self.selection_ignore_button)
+        action_bar.addWidget(self.selection_open_button)
+        action_bar.addSpacing(16)
+        action_bar.addWidget(self.bulk_action_button)
         action_bar.addWidget(self.undo_button)
         action_bar.addStretch()
+        shortcut_hint = QLabel("Tasten: F = Freigeben, P = Prüfen, I = Ignorieren, O = Offen")
+        shortcut_hint.setObjectName("mutedLabel")
+        action_bar.addWidget(shortcut_hint)
 
-        selection_action_bar = QHBoxLayout()
-        selection_action_bar.addWidget(self.selection_approved_button)
-        selection_action_bar.addWidget(self.selection_review_button)
-        selection_action_bar.addWidget(self.selection_ignore_button)
-        selection_action_bar.addWidget(self.selection_open_button)
-        selection_action_bar.addStretch()
-
-        bulk_action_bar = QHBoxLayout()
-        bulk_action_bar.addWidget(self.bulk_approved_button)
-        bulk_action_bar.addWidget(self.bulk_review_button)
-        bulk_action_bar.addWidget(self.bulk_ignore_button)
-        bulk_action_bar.addWidget(self.bulk_open_button)
-        bulk_action_bar.addStretch()
-
-        summary_bar = QHBoxLayout()
-        summary_bar.addWidget(self.summary_visible_label)
-        summary_bar.addWidget(self.summary_selected_label)
-        summary_bar.addWidget(self.summary_open_label)
-        summary_bar.addWidget(self.summary_approved_label)
-        summary_bar.addWidget(self.summary_review_label)
-        summary_bar.addWidget(self.summary_ignored_label)
-        summary_bar.addWidget(self.summary_auto_review_label)
-        summary_bar.addStretch()
-
-        draft_title = QLabel("Angebot / Draft")
-        draft_title.setStyleSheet("font-weight: 700; font-size: 13px;")
-        draft_bar = QVBoxLayout()
-        draft_bar.setContentsMargins(10, 10, 10, 10)
-        draft_bar.setSpacing(8)
-        draft_bar.addWidget(draft_title)
-        compact_hint = QLabel(
-            "Vorschau direkt hier. Erweiterte Bearbeitung (Belegtitel, Texte, Zahlungsziel, Lexware-Filter, Fahrtkosten)"
-            " im Fenster: Angebot/Rechnung bearbeiten"
-        )
-        compact_hint.setWordWrap(True)
-        compact_hint.setStyleSheet("color: #5f6368;")
-        draft_bar.addWidget(compact_hint)
-        draft_bar.addWidget(self.draft_preview_view)
-
-        article_title = QLabel("Artikel")
-        article_title.setStyleSheet("font-weight: 700; font-size: 13px;")
-        article_bar = QVBoxLayout()
+        # --- Rechtes Panel: Tabs statt gestapelter Bereiche ---
+        article_panel = QWidget()
+        article_bar = QVBoxLayout(article_panel)
         article_bar.setContentsMargins(10, 10, 10, 10)
         article_bar.setSpacing(8)
-        article_bar.addWidget(article_title)
         article_bar.addWidget(self.article_combo)
         article_button_bar = QHBoxLayout()
         article_button_bar.setSpacing(6)
@@ -482,113 +648,117 @@ class MainWindow(QMainWindow):
         article_bar.addLayout(article_button_bar)
         article_template_bar = QHBoxLayout()
         article_template_bar.setSpacing(6)
-        article_template_bar.addWidget(self.article_template_combo)
+        article_template_bar.addWidget(self.article_template_combo, 1)
         article_template_bar.addWidget(self.article_template_save_button)
         article_template_bar.addWidget(self.article_template_apply_button)
         article_bar.addLayout(article_template_bar)
         article_quick_select_bar = QHBoxLayout()
         article_quick_select_bar.setSpacing(6)
-        article_quick_select_bar.addWidget(self.article_quick_select_input)
+        article_quick_select_bar.addWidget(self.article_quick_select_input, 1)
         article_quick_select_bar.addWidget(self.article_quick_select_apply_button)
         article_bar.addLayout(article_quick_select_bar)
         article_bar.addWidget(self.article_list_widget)
         article_bar.addWidget(self.article_summary_label)
         article_price_row = QHBoxLayout()
-        article_price_row.addWidget(QLabel("Preis (ausgewählter Artikel)"))
-        article_price_row.addWidget(self.article_price_spin)
+        article_price_row.addWidget(_field_label("Preis (ausgewählter Artikel)"))
+        article_price_row.addWidget(self.article_price_spin, 1)
         article_bar.addLayout(article_price_row)
-        article_bar.addWidget(QLabel("Artikelbezeichnung"))
+        article_bar.addWidget(_field_label("Artikelbezeichnung"))
         article_bar.addWidget(self.article_title_edit)
-        article_bar.addWidget(QLabel("Zusatzkommentar"))
+        article_bar.addWidget(_field_label("Zusatzkommentar"))
         article_bar.addWidget(self.article_comment_edit)
         article_bar.addWidget(self.article_text_save_button)
-        article_bar.addWidget(QLabel("Manuelle Notiz"))
-        article_bar.addWidget(self.note_edit)
-        article_bar.addWidget(self.save_note_button)
+        article_bar.addStretch()
 
-        log_title = QLabel("Änderungsverlauf")
-        log_title.setStyleSheet("font-weight: 700; font-size: 13px;")
-        log_bar = QVBoxLayout()
+        article_scroll = QScrollArea()
+        article_scroll.setWidget(article_panel)
+        article_scroll.setWidgetResizable(True)
+        article_scroll.setFrameShape(QFrame.NoFrame)
+
+        note_panel = QWidget()
+        note_layout = QVBoxLayout(note_panel)
+        note_layout.setContentsMargins(10, 10, 10, 10)
+        note_layout.setSpacing(8)
+        note_layout.addWidget(_field_label("Manuelle Notiz zur ausgewählten Gruppe"))
+        note_layout.addWidget(self.note_edit, 1)
+        note_layout.addWidget(self.save_note_button)
+
+        draft_panel = QWidget()
+        draft_bar = QVBoxLayout(draft_panel)
+        draft_bar.setContentsMargins(10, 10, 10, 10)
+        draft_bar.setSpacing(8)
+        compact_hint = QLabel(
+            "Vorschau des Lexware-Belegs. Erweiterte Bearbeitung (Belegtitel, Texte, Zahlungsziel,"
+            " Fahrtkosten) über den Button \u201eAngebot/Rechnung bearbeiten \u2026\u201c."
+        )
+        compact_hint.setWordWrap(True)
+        compact_hint.setObjectName("mutedLabel")
+        draft_bar.addWidget(compact_hint)
+        draft_bar.addWidget(self.draft_preview_view, 1)
+
+        log_panel = QWidget()
+        log_bar = QVBoxLayout(log_panel)
         log_bar.setContentsMargins(10, 10, 10, 10)
         log_bar.setSpacing(8)
-        log_bar.addWidget(log_title)
-        log_bar.addWidget(self.log_view)
+        log_bar.addWidget(self.log_view, 1)
 
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.addLayout(top_bar)
-        left_layout.addLayout(filter_bar)
-        left_layout.addLayout(action_bar)
-        left_layout.addLayout(selection_action_bar)
-        left_layout.addLayout(bulk_action_bar)
-        left_layout.addLayout(summary_bar)
-        left_layout.addWidget(self.table_widget, 12)
-
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(8, 8, 8, 8)
-        right_layout.setSpacing(10)
-
-        detail_section = QFrame()
-        detail_section.setObjectName("rightSection")
-        detail_layout = QVBoxLayout(detail_section)
+        detail_panel = QWidget()
+        detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(10, 10, 10, 10)
         detail_layout.addWidget(self.detail_view)
 
-        draft_section = QFrame()
-        draft_section.setObjectName("rightSection")
-        draft_section.setLayout(draft_bar)
+        self.right_tabs = QTabWidget()
+        self.right_tabs.addTab(detail_panel, "Details")
+        self.right_tabs.addTab(article_scroll, "Artikel")
+        self.right_tabs.addTab(draft_panel, "Belegvorschau")
+        self.right_tabs.addTab(note_panel, "Notiz")
+        self.right_tabs.addTab(log_panel, "Verlauf")
 
-        article_section = QFrame()
-        article_section.setObjectName("rightSection")
-        article_section.setLayout(article_bar)
+        # --- Linke Seite: Tabelle mit maximalem Platz ---
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(8, 8, 4, 8)
+        left_layout.setSpacing(6)
+        left_layout.addLayout(top_bar)
+        left_layout.addLayout(filter_bar)
+        left_layout.addLayout(action_bar)
+        left_layout.addWidget(self.table_widget, 1)
 
-        log_section = QFrame()
-        log_section.setObjectName("rightSection")
-        log_section.setLayout(log_bar)
-
-        lower_editor_splitter = QSplitter(Qt.Horizontal)
-        lower_editor_splitter.addWidget(draft_section)
-        lower_editor_splitter.addWidget(article_section)
-        lower_editor_splitter.setChildrenCollapsible(False)
-        lower_editor_splitter.setStretchFactor(0, 1)
-        lower_editor_splitter.setStretchFactor(1, 1)
-        lower_editor_splitter.setSizes([620, 620])
-        lower_editor_splitter.setMaximumHeight(280)
-
-        left_layout.addWidget(lower_editor_splitter, 1)
-
-        right_widget.setStyleSheet(
-            "QFrame#rightSection {"
-            " border: 1px solid #d9dfe7;"
-            " border-radius: 8px;"
-            " background: #f8fafc;"
-            " }"
-        )
-
-        right_layout.addWidget(detail_section, 4)
-        right_layout.addWidget(log_section, 2)
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(4, 8, 8, 8)
+        right_layout.setSpacing(8)
+        right_layout.addWidget(self.right_tabs)
 
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
         splitter.setChildrenCollapsible(False)
-        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(0, 5)
         splitter.setStretchFactor(1, 2)
-        splitter.setSizes([1440, 640])
+        splitter.setSizes([1500, 560])
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.addWidget(splitter)
         self.setCentralWidget(central)
 
-        self.open_button.clicked.connect(self.open_file_dialog)
-        self.load_project_button.clicked.connect(self.load_project_file)
-        self.save_project_button.clicked.connect(self.save_project_file)
-        self.load_session_button.clicked.connect(self.load_session_file)
-        self.save_session_button.clicked.connect(self.save_session_file)
-        self.export_csv_button.clicked.connect(self.export_visible_groups_to_csv)
-        self.export_json_button.clicked.connect(self.export_visible_groups_to_json)
+        # --- Statusleiste: Zusammenfassung + PDF-Ziel ---
+        status_bar = self.statusBar()
+        for label in (
+            self.summary_visible_label,
+            self.summary_selected_label,
+            self.summary_open_label,
+            self.summary_approved_label,
+            self.summary_review_label,
+            self.summary_ignored_label,
+            self.summary_auto_review_label,
+        ):
+            status_bar.addWidget(label)
+        status_bar.addPermanentWidget(self.pdf_folder_label)
+        status_bar.addPermanentWidget(self.open_pdf_folder_button)
+
         self.lexware_preview_button.clicked.connect(self.open_lexware_preview_dialog)
         self.offer_editor_button.clicked.connect(self.open_offer_editor_dialog)
         self.lexware_export_button.clicked.connect(self.export_selected_groups_to_lexware_draft)
@@ -596,22 +766,10 @@ class MainWindow(QMainWindow):
         self.save_note_button.clicked.connect(self.save_note_for_selected)
         self.undo_button.clicked.connect(self.undo_last_action)
 
-        self.mark_approved_button.clicked.connect(lambda: self.set_manual_status_for_selected("freigegeben", advance=True))
-        self.mark_review_button.clicked.connect(lambda: self.set_manual_status_for_selected("pruefen", advance=True))
-        self.mark_ignore_button.clicked.connect(lambda: self.set_manual_status_for_selected("ignorieren", advance=True))
-
         self.selection_approved_button.clicked.connect(lambda: self.set_manual_status_for_selected_rows("freigegeben"))
         self.selection_review_button.clicked.connect(lambda: self.set_manual_status_for_selected_rows("pruefen"))
         self.selection_ignore_button.clicked.connect(lambda: self.set_manual_status_for_selected_rows("ignorieren"))
         self.selection_open_button.clicked.connect(lambda: self.set_manual_status_for_selected_rows("offen"))
-
-        self.bulk_approved_button.clicked.connect(lambda: self.set_manual_status_for_visible("freigegeben"))
-        self.bulk_review_button.clicked.connect(lambda: self.set_manual_status_for_visible("pruefen"))
-        self.bulk_ignore_button.clicked.connect(lambda: self.set_manual_status_for_visible("ignorieren"))
-        self.bulk_open_button.clicked.connect(lambda: self.set_manual_status_for_visible("offen"))
-
-        self.show_open_only_button.clicked.connect(self.activate_open_only_mode)
-        self.show_all_manual_button.clicked.connect(self.activate_show_all_mode)
 
         self.auto_filter_combo.currentIndexChanged.connect(self.refresh_table)
         self.manual_filter_combo.currentIndexChanged.connect(self.refresh_table)
